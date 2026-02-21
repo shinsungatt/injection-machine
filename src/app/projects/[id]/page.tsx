@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   ChevronLeft, Plus, BarChart2, Trash2, RefreshCw,
-  FileSpreadsheet, FileText, Box, Layers, X, Upload,
+  FileSpreadsheet, FileText, Box, Layers, X, Upload, CheckCircle2,
 } from 'lucide-react'
 import type { Project, Part } from '@/lib/supabase'
 import { calcRequiredClampingForce, predictCycleTime } from '@/lib/algorithm'
@@ -96,12 +96,20 @@ function UploadCard({
     if (f) onUpload(config.type, f)
   }
 
+  const hasFiles = files.length > 0
+
   return (
-    <Card className={`border-2 ${drag ? 'border-blue-400 bg-blue-50' : config.color}`}>
+    <Card className={`border-2 ${drag ? 'border-blue-400 bg-blue-50' : hasFiles ? 'border-green-400 bg-green-50' : config.color}`}>
       <CardHeader className="pb-2 pt-4 px-4">
         <CardTitle className="text-sm flex items-center gap-2">
           {config.icon}
           {config.label}
+          {hasFiles && (
+            <span className="ml-auto flex items-center gap-1 text-green-600">
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="text-xs font-normal">{files.length}개</span>
+            </span>
+          )}
         </CardTitle>
         <p className="text-xs text-gray-400">{config.desc}</p>
       </CardHeader>
@@ -110,7 +118,8 @@ function UploadCard({
         {files.length > 0 && (
           <div className="space-y-1">
             {files.map(f => (
-              <div key={f.id} className="flex items-center gap-2 text-xs bg-white rounded border px-2 py-1.5">
+              <div key={f.id} className="flex items-center gap-2 text-xs bg-white rounded border border-green-200 px-2 py-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                 <span className="flex-1 truncate font-medium text-gray-700">{f.name}</span>
                 {f.file_size && <span className="text-gray-400 shrink-0">{(f.file_size / 1024).toFixed(0)}KB</span>}
                 {f.file_url && (
