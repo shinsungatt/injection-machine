@@ -138,7 +138,16 @@ export default function MachinesPage() {
   const fetchMachines = useCallback(() => {
     fetch('/api/machines')
       .then(r => r.json())
-      .then(data => { setMachines(Array.isArray(data) ? data : []); setLoading(false) })
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMachines(data)
+        } else {
+          toast.error(data?.error ?? '설비 데이터를 불러올 수 없습니다.')
+          setMachines([])
+        }
+        setLoading(false)
+      })
+      .catch(() => { toast.error('서버 연결 오류'); setLoading(false) })
   }, [])
 
   useEffect(() => { fetchMachines() }, [fetchMachines])
