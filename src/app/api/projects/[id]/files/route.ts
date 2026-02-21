@@ -114,7 +114,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // file_data(base64)는 목록 조회에서 제외 (성능)
   let query = supabase
     .from('project_files')
-    .select('id, project_id, file_type, name, file_size, file_url, storage_path, created_at')
+    .select('id, project_id, file_type, name, file_size, created_at')
     .eq('project_id', id)
   if (type) query = query.eq('file_type', type)
   const { data, error } = await query.order('created_at', { ascending: false })
@@ -122,7 +122,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     console.error('[GET /files] Supabase error:', error.message, error.details, error.hint)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  return NextResponse.json(data ?? [])
+  // file_url은 DB에 없으므로 코드에서 생성 (excel은 null, 나머지는 download 엔드포인트)
+  const files = (data ?? []).map(f => ({
+    ...f,
+    file_url: f.file_type !== 'excel' ? `/api/projects/${id}/files/${f.id}/download` : null,
+    storage_path: null,
+  }))
+  return NextResponse.json(files)
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -181,9 +187,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: dbError.message }, { status: 500 })
   }
 
-  // 다운로드 URL은 파일 ID 기반으로 생성
+  // 다운로드 URL은 파일 ID 기반으로 코드에서 생성
   const file_url = `/api/projects/${id}/files/${fileRecord.id}/download`
-  await supabase.from('project_files').update({ file_url }).eq('id', fileRecord.id)
 
   return NextResponse.json({ ...fileRecord, file_url }, { status: 201 })
 }
