@@ -50,6 +50,7 @@ export type Part = {
   cycle_time_sec: number | null
   drawing_file_url: string | null
   cad_file_url: string | null
+  notes: string | null
   created_at: string
 }
 

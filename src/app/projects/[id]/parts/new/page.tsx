@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChevronLeft, FileText, ExternalLink } from 'lucide-react'
-import { calcRequiredClampingForce, calcRequiredShotWeight } from '@/lib/algorithm'
+import { calcRequiredClampingForce, calcRequiredShotWeight, parseProductSize, calcMoldSizeFromProduct, productDimsToProjectedArea } from '@/lib/algorithm'
 import type { Part } from '@/lib/supabase'
 
 type PdfFile = { id: string; name: string; file_url: string | null }
@@ -20,6 +20,7 @@ const MATERIALS = ['PP', 'ABS', 'PA66', 'PA', 'PC', 'POM', 'PE', 'PS', 'PET', 'T
 const emptyForm = {
   part_number: '', part_name: '', material: 'ABS',
   part_weight_g: '', projected_area_cm2: '', cavity_count: '1', runner_weight_g: '',
+  product_width_mm: '', product_height_mm: '', product_depth_mm: '',
   mold_width_mm: '', mold_height_mm: '', mold_depth_mm: '',
 }
 
@@ -28,6 +29,7 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [pdfs, setPdfs] = useState<PdfFile[]>([])
+  const composingRef = useRef(false)
 
   useEffect(() => {
     params.then(({ id }) => {
@@ -37,8 +39,54 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
     })
   }, [params])
 
+  // 제품 사이즈 일괄 입력 파싱 (예: "100×200×50")
+  const handleProductSizeInput = useCallback((raw: string) => {
+    const parsed = parseProductSize(raw)
+    if (!parsed) return
+    setForm(prev => ({
+      ...prev,
+      product_width_mm:  String(parsed.width),
+      product_height_mm: String(parsed.height),
+      product_depth_mm:  parsed.depth > 0 ? String(parsed.depth) : prev.product_depth_mm,
+    }))
+  }, [])
+
+  // 제품 치수 변경 시 투영면적·금형 크기 자동 계산
+  useEffect(() => {
+    const w = parseFloat(form.product_width_mm)  || 0
+    const h = parseFloat(form.product_height_mm) || 0
+    const c = parseInt(form.cavity_count)        || 1
+    if (w <= 0 || h <= 0) return
+
+    const area = productDimsToProjectedArea(w, h)
+    const mold = calcMoldSizeFromProduct(w, h, c)
+
+    setForm(prev => {
+      // 값이 바뀐 경우만 업데이트 (무한 루프 방지)
+      if (
+        prev.projected_area_cm2 === String(area) &&
+        prev.mold_width_mm      === String(mold.width) &&
+        prev.mold_height_mm     === String(mold.height)
+      ) return prev
+      return {
+        ...prev,
+        projected_area_cm2: String(area),
+        mold_width_mm:      String(mold.width),
+        mold_height_mm:     String(mold.height),
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.product_width_mm, form.product_height_mm, form.cavity_count])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (composingRef.current) return
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+    composingRef.current = false
+    const target = e.target as HTMLInputElement
+    setForm(prev => ({ ...prev, [target.name]: target.value }))
   }
 
   // 실시간 계산 미리보기
@@ -125,17 +173,65 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* 제품 사이즈 입력 → 투영면적·금형 크기 자동 계산 */}
+        <Card className="border-indigo-200 bg-indigo-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-indigo-800">제품 사이즈 (mm)</CardTitle>
+            <p className="text-xs text-indigo-500">
+              입력하면 투영면적과 금형 크기가 자동 계산됩니다.&nbsp;
+              <span className="font-medium">일괄 입력:</span>&nbsp;
+              <button type="button" className="underline text-indigo-600 hover:text-indigo-800"
+                onClick={() => {
+                  const raw = prompt('제품 사이즈 입력 (예: 100×200×50 또는 100x200x50)')
+                  if (raw) handleProductSizeInput(raw)
+                }}>
+                가로×세로×높이 붙여넣기
+              </button>
+            </p>
+          </CardHeader>
+          <CardContent className="grid grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="product_width_mm">가로 (mm)</Label>
+              <Input id="product_width_mm" name="product_width_mm" type="number" step="0.1"
+                value={form.product_width_mm} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
+                placeholder="예: 150" className="bg-white" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="product_height_mm">세로 (mm)</Label>
+              <Input id="product_height_mm" name="product_height_mm" type="number" step="0.1"
+                value={form.product_height_mm} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
+                placeholder="예: 200" className="bg-white" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="product_depth_mm">높이 (mm)</Label>
+              <Input id="product_depth_mm" name="product_depth_mm" type="number" step="0.1"
+                value={form.product_depth_mm} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
+                placeholder="예: 50" className="bg-white" />
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader><CardTitle className="text-base">파트 기본 정보</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="part_number">파트 번호 *</Label>
               <Input id="part_number" name="part_number" value={form.part_number} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
                 placeholder="예: P-001" required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="part_name">파트명 *</Label>
               <Input id="part_name" name="part_name" value={form.part_name} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
                 placeholder="예: 도어 인너 트림" required />
             </div>
             <div className="space-y-1.5">
@@ -158,9 +254,14 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
                 value={form.part_weight_g} onChange={handleChange} placeholder="예: 250.5" required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="projected_area_cm2">투영면적 (cm²) *</Label>
+              <Label htmlFor="projected_area_cm2">
+                투영면적 (cm²) *
+                {form.product_width_mm && form.product_height_mm &&
+                  <span className="ml-1.5 text-xs font-normal text-indigo-500">자동계산</span>}
+              </Label>
               <Input id="projected_area_cm2" name="projected_area_cm2" type="number" step="0.01"
-                value={form.projected_area_cm2} onChange={handleChange} placeholder="예: 180.0" required />
+                value={form.projected_area_cm2} onChange={handleChange} placeholder="예: 180.0" required
+                className={form.product_width_mm && form.product_height_mm ? 'bg-indigo-50 border-indigo-200' : ''} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="runner_weight_g">런너 중량 (g)</Label>
@@ -172,17 +273,27 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">금형 크기 (선택)</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              금형 크기 (선택)
+              {form.product_width_mm && form.product_height_mm &&
+                <span className="ml-2 text-xs font-normal text-indigo-500">
+                  제품 사이즈 기준 자동 추정 (외곽 100mm + 캐비티 간 60mm)
+                </span>}
+            </CardTitle>
+          </CardHeader>
           <CardContent className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="mold_width_mm">너비 (mm)</Label>
+              <Label htmlFor="mold_width_mm">가로 (mm)</Label>
               <Input id="mold_width_mm" name="mold_width_mm" type="number" step="0.1"
-                value={form.mold_width_mm} onChange={handleChange} placeholder="예: 450" />
+                value={form.mold_width_mm} onChange={handleChange} placeholder="예: 450"
+                className={form.product_width_mm && form.product_height_mm ? 'bg-indigo-50 border-indigo-200' : ''} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="mold_height_mm">높이 (mm)</Label>
+              <Label htmlFor="mold_height_mm">세로 (mm)</Label>
               <Input id="mold_height_mm" name="mold_height_mm" type="number" step="0.1"
-                value={form.mold_height_mm} onChange={handleChange} placeholder="예: 380" />
+                value={form.mold_height_mm} onChange={handleChange} placeholder="예: 380"
+                className={form.product_width_mm && form.product_height_mm ? 'bg-indigo-50 border-indigo-200' : ''} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="mold_depth_mm">두께 (mm)</Label>

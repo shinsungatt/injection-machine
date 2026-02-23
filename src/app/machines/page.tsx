@@ -132,7 +132,7 @@ export default function MachinesPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [filter, setFilter] = useState('')
-  const [sortDir, setSortDir] = useState<SortDir>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchMachines = useCallback(() => {
@@ -191,7 +191,7 @@ export default function MachinesPage() {
   const filtered = machines
     .filter(m => filter === '' || m.name.toLowerCase().includes(filter.toLowerCase()) || m.manufacturer.toLowerCase().includes(filter.toLowerCase()))
   const sorted = sortDir === null ? filtered : [...filtered].sort((a, b) => {
-    const cmp = a.name.localeCompare(b.name, 'ko')
+    const cmp = a.name.localeCompare(b.name, 'ko', { numeric: true })
     return sortDir === 'asc' ? cmp : -cmp
   })
 

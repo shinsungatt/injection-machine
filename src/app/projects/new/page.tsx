@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -15,9 +15,17 @@ export default function NewProjectPage() {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', model_name: '', description: '' })
+  const composingRef = useRef(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (composingRef.current) return
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    composingRef.current = false
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement
+    setForm(prev => ({ ...prev, [target.name]: target.value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,16 +67,22 @@ export default function NewProjectPage() {
             <div className="space-y-1.5">
               <Label htmlFor="name">프로젝트명 *</Label>
               <Input id="name" name="name" value={form.name} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
                 placeholder="예: 2024 신차 내장 파트 설비 선정" required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="model_name">모델명 *</Label>
               <Input id="model_name" name="model_name" value={form.model_name} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
                 placeholder="예: MODEL-X2024" required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="description">설명</Label>
               <Textarea id="description" name="description" value={form.description} onChange={handleChange}
+                onCompositionStart={() => { composingRef.current = true }}
+                onCompositionEnd={handleCompositionEnd}
                 placeholder="프로젝트 설명 (선택)" rows={3} />
             </div>
             <div className="flex gap-3 pt-2">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -64,6 +64,54 @@ function UtilizationBar({ value, label }: { value: number; label: string }) {
   )
 }
 
+function NoteCell({
+  value, onChange, onSave, saving,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onSave: () => void
+  saving: boolean
+}) {
+  const composingRef = useRef(false)
+  const [focused, setFocused] = useState(false)
+
+  if (!focused && !value) {
+    return (
+      <button
+        onClick={() => setFocused(true)}
+        className="text-xs text-gray-300 hover:text-gray-400 transition-colors whitespace-nowrap"
+      >
+        + 메모
+      </button>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <textarea
+        // eslint-disable-next-line jsx-a11y/no-autofocus
+        autoFocus={focused}
+        value={value}
+        rows={2}
+        className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none focus:outline-none focus:border-blue-400 bg-white"
+        style={{ minWidth: '140px' }}
+        placeholder="한글 메모 입력..."
+        onChange={(e) => { if (!composingRef.current) onChange(e.target.value) }}
+        onCompositionStart={() => { composingRef.current = true }}
+        onCompositionEnd={(e) => {
+          composingRef.current = false
+          onChange((e.target as HTMLTextAreaElement).value)
+        }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => { setFocused(false); onSave() }}
+      />
+      {saving && (
+        <span className="absolute bottom-1 right-1 text-xs text-blue-400">저장중...</span>
+      )}
+    </div>
+  )
+}
+
 function CalcSummary({ part }: { part: Part }) {
   const resinPressure = getResinPressure(part.material)
   const materialCorr = getMaterialCorrection(part.material)
@@ -119,12 +167,23 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
   const [projectId, setProjectId] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [reanalyzing, setReanalyzing] = useState(false)
+  const [notesDraft, setNotesDraft] = useState<Record<string, string>>({})
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
 
   const fetchResults = useCallback((id: string) => {
     fetch(`/api/projects/${id}/recommend`)
       .then(r => r.json())
       .then(data => {
-        setResults(Array.isArray(data) ? data : [])
+        const arr: ResultItem[] = Array.isArray(data) ? data : []
+        setResults(arr)
+        // Initialize notes from DB (don't overwrite locally edited drafts)
+        setNotesDraft(prev => {
+          const init: Record<string, string> = {}
+          for (const { part } of arr) {
+            if (!(part.id in prev)) init[part.id] = part.notes ?? ''
+          }
+          return { ...init, ...prev }
+        })
         setLoading(false)
       })
   }, [])
@@ -141,13 +200,24 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
     else { const e = await res.json(); toast.error(e.error || '실패') }
   }
 
+  const saveNote = async (partId: string) => {
+    const value = (notesDraft[partId] ?? '').trim()
+    setSavingNoteId(partId)
+    await fetch(`/api/parts/${partId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: value || null }),
+    })
+    setSavingNoteId(null)
+  }
+
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new()
 
     // ── 시트 1: 요약표 ──────────────────────────────────────────────
     const summaryHeader = [
       '파트번호', '파트명', '재료', '예상TON(T)', 'C/T(sec)', 'C/T구분',
-      '추천 호기', '설비 용량(T)', '형체력 활용률(%)',
+      '추천 호기', '설비 용량(T)', '형체력 활용률(%)', '비고',
     ]
     const summaryData = summaryRows.map(row => [
       row.partNumber,
@@ -159,9 +229,10 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
       row.machineName ?? '추천 없음',
       row.machineCapacity > 0 ? row.machineCapacity : '',
       row.hasRec ? parseFloat(row.clampingPct.toFixed(1)) : '',
+      notesDraft[row.partId] ?? '',
     ])
     const ws1 = XLSX.utils.aoa_to_sheet([summaryHeader, ...summaryData])
-    ws1['!cols'] = [14, 20, 8, 12, 10, 8, 22, 12, 16].map(w => ({ wch: w }))
+    ws1['!cols'] = [14, 20, 8, 12, 10, 8, 22, 12, 16, 30].map(w => ({ wch: w }))
     XLSX.utils.book_append_sheet(wb, ws1, '요약표')
 
     // ── 시트 2: 파트별 상세 (1~3순위) ──────────────────────────────
@@ -170,6 +241,7 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
       '1순위 설비', '1순위 형체력활용률(%)', '1순위 사출량활용률(%)',
       '2순위 설비', '2순위 형체력활용률(%)', '2순위 사출량활용률(%)',
       '3순위 설비', '3순위 형체력활용률(%)', '3순위 사출량활용률(%)',
+      '비고',
     ]
     const detailData = results.map(({ part, recommendations }) => {
       const getRec = (rank: number) => recommendations.find(r => r.rank === rank)
@@ -189,10 +261,11 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
         r3?.machine?.name ?? '',
         r3 ? parseFloat(r3.utilization_clamping_pct.toFixed(1)) : '',
         r3 ? parseFloat(r3.utilization_shot_pct.toFixed(1)) : '',
+        notesDraft[part.id] ?? '',
       ]
     })
     const ws2 = XLSX.utils.aoa_to_sheet([detailHeader, ...detailData])
-    ws2['!cols'] = [14, 20, 8, 14, 10, 22, 18, 18, 22, 18, 18, 22, 18, 18].map(w => ({ wch: w }))
+    ws2['!cols'] = [14, 20, 8, 14, 10, 22, 18, 18, 22, 18, 18, 22, 18, 18, 30].map(w => ({ wch: w }))
     XLSX.utils.book_append_sheet(wb, ws2, '파트별 상세')
 
     // ── 시트 3: 설비별 배정 현황 ────────────────────────────────────
@@ -226,6 +299,7 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
       const actualCt = r.part.cycle_time_sec
       const predictedCt = predictCycleTime(r.part)
       return {
+        partId: r.part.id,
         partNumber: r.part.part_number,
         partName: r.part.part_name,
         material: r.part.material,
@@ -363,6 +437,7 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
                       <TableHead className="text-center">추천 호기</TableHead>
                       <TableHead className="text-right">설비 용량</TableHead>
                       <TableHead className="text-right">형체력 활용률</TableHead>
+                      <TableHead className="min-w-36">비고</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -409,6 +484,14 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
                                 {row.clampingPct.toFixed(1)}%
                               </span>
                             ) : '-'}
+                          </TableCell>
+                          <TableCell className="min-w-36">
+                            <NoteCell
+                              value={notesDraft[row.partId] ?? ''}
+                              onChange={(v) => setNotesDraft(prev => ({ ...prev, [row.partId]: v }))}
+                              onSave={() => saveNote(row.partId)}
+                              saving={savingNoteId === row.partId}
+                            />
                           </TableCell>
                         </TableRow>
                       )

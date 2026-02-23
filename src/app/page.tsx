@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Factory, FolderOpen, Plus, ArrowRight, CheckCircle } from 'lucide-react'
+import { Factory, FolderOpen, Plus, ArrowRight, CheckCircle, BookOpen } from 'lucide-react'
 import type { Project, Machine } from '@/lib/supabase'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -96,6 +96,11 @@ export default function DashboardPage() {
             <Link href="/machines">
               <Button variant="outline" className="w-full justify-start gap-2">
                 <Factory className="h-4 w-4" /> 설비 목록 보기
+              </Button>
+            </Link>
+            <Link href="/manual.html">
+              <Button variant="outline" className="w-full justify-start gap-2">
+                <BookOpen className="h-4 w-4" /> 사용설명서 보기
               </Button>
             </Link>
           </CardContent>

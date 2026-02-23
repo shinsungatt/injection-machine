@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -35,12 +35,21 @@ export function MachineForm({ machine, machineId }: Props) {
     is_active: machine?.is_active ?? true,
   })
 
+  const composingRef = useRef(false)
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (composingRef.current) return
     const { name, value, type } = e.target
     setForm(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
     }))
+  }
+
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    composingRef.current = false
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement
+    setForm(prev => ({ ...prev, [target.name]: target.value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -96,11 +105,15 @@ export function MachineForm({ machine, machineId }: Props) {
           <div className="col-span-2 space-y-1.5">
             <Label htmlFor="name">설비명 *</Label>
             <Input id="name" name="name" value={form.name} onChange={handleChange}
+              onCompositionStart={() => { composingRef.current = true }}
+              onCompositionEnd={handleCompositionEnd}
               placeholder="예: LS Electric 250T" required />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="manufacturer">제조사</Label>
             <Input id="manufacturer" name="manufacturer" value={form.manufacturer} onChange={handleChange}
+              onCompositionStart={() => { composingRef.current = true }}
+              onCompositionEnd={handleCompositionEnd}
               placeholder="예: LS Electric" />
           </div>
           <div className="space-y-1.5">
@@ -175,6 +188,8 @@ export function MachineForm({ machine, machineId }: Props) {
           <div className="space-y-1.5">
             <Label htmlFor="notes">비고</Label>
             <Textarea id="notes" name="notes" value={form.notes} onChange={handleChange}
+              onCompositionStart={() => { composingRef.current = true }}
+              onCompositionEnd={handleCompositionEnd}
               placeholder="설비 관련 특이사항..." rows={2} />
           </div>
           <Separator />

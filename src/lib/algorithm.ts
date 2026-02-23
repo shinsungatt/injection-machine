@@ -1,5 +1,81 @@
 import type { Machine, Part, Recommendation } from './supabase'
 
+// ────────────────────────────────────────────────────────────────
+// 제품 사이즈 파싱 / 금형 크기 추정
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * 제품 사이즈 문자열 파싱 → { width, height, depth } (mm)
+ * 지원 형식:
+ *   "100×200×50", "100x200x50", "100*200*50", "100 200 50"
+ *   "W100 H200 D50", "가로100 세로200 높이50"
+ */
+export function parseProductSize(raw: string): { width: number; height: number; depth: number } | null {
+  if (!raw || !raw.trim()) return null
+  let s = String(raw)
+    .replace(/mm/gi, '')
+    .replace(/cm/gi, '')
+    .replace(/가로|폭/g, ' ')
+    .replace(/세로|길이/g, ' ')
+    .replace(/높이|두께|깊이/g, ' ')
+    .replace(/W\s*[:=]?\s*/gi, ' ')
+    .replace(/H\s*[:=]?\s*/gi, ' ')
+    .replace(/D\s*[:=]?\s*/gi, ' ')
+    .replace(/L\s*[:=]?\s*/gi, ' ')
+    .trim()
+  const nums = s
+    .split(/[×xX✕＊*,，\s/\\]+/)
+    .map(n => parseFloat(n.trim()))
+    .filter(n => !isNaN(n) && n > 0)
+  if (nums.length >= 3) return { width: nums[0], height: nums[1], depth: nums[2] }
+  if (nums.length === 2) return { width: nums[0], height: nums[1], depth: 0 }
+  return null
+}
+
+/**
+ * 캐비티 수 → 배치 레이아웃 [cols, rows]
+ * 가능하면 가로 방향으로 더 배치 (금형 가로 확장 최소화)
+ */
+export function calcCavityLayout(count: number): [number, number] {
+  const n = Math.max(1, Math.round(count))
+  if (n <= 1)  return [1, 1]
+  if (n <= 2)  return [2, 1]
+  if (n <= 4)  return [2, 2]
+  if (n <= 6)  return [3, 2]
+  if (n <= 8)  return [4, 2]
+  if (n <= 12) return [4, 3]
+  if (n <= 16) return [4, 4]
+  const cols = Math.ceil(Math.sqrt(n))
+  const rows = Math.ceil(n / cols)
+  return [cols, rows]
+}
+
+/**
+ * 제품 사이즈 + 캐비티수 → 금형 크기 추정 (mm)
+ * 외곽 여유: 100 mm (양측), 캐비티 간 간격: 60 mm
+ */
+export function calcMoldSizeFromProduct(
+  productW: number,
+  productH: number,
+  cavityCount: number
+): { width: number; height: number } {
+  const [cols, rows] = calcCavityLayout(cavityCount)
+  const outer = 100 // 외곽 여유 (mm)
+  const gap   = 60  // 캐비티 간 간격 (mm)
+  return {
+    width:  Math.ceil(productW * cols + gap * (cols - 1) + outer * 2),
+    height: Math.ceil(productH * rows + gap * (rows - 1) + outer * 2),
+  }
+}
+
+/**
+ * 제품 가로×세로 (mm) → 투영면적 (cm²)
+ * 1 cm² = 100 mm²
+ */
+export function productDimsToProjectedArea(widthMm: number, heightMm: number): number {
+  return Math.round((widthMm * heightMm) / 100 * 100) / 100
+}
+
 // 수지압력 기준값 (kgf/cm²)
 const RESIN_PRESSURE: Record<string, number> = {
   PP: 300,
