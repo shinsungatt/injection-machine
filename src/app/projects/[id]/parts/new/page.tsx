@@ -106,8 +106,19 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const { id } = await params
-    if (!form.part_number || !form.part_name || !form.part_weight_g || !form.projected_area_cm2) {
+    if (!form.part_number || !form.part_name || !form.part_weight_g) {
       toast.error('필수 항목을 입력하세요.')
+      return
+    }
+    // 투영면적: 직접 입력 없으면 제품 사이즈로 자동 계산
+    const w = parseFloat(form.product_width_mm) || 0
+    const h = parseFloat(form.product_height_mm) || 0
+    let projectedArea = parseFloat(form.projected_area_cm2) || 0
+    if (projectedArea <= 0 && w > 0 && h > 0) {
+      projectedArea = productDimsToProjectedArea(w, h)
+    }
+    if (projectedArea <= 0) {
+      toast.error('투영면적을 직접 입력하거나 제품 가로·세로 사이즈를 입력하세요.')
       return
     }
     setSaving(true)
@@ -116,7 +127,7 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
       part_name: form.part_name,
       material: form.material,
       part_weight_g: parseFloat(form.part_weight_g),
-      projected_area_cm2: parseFloat(form.projected_area_cm2),
+      projected_area_cm2: projectedArea,
       cavity_count: parseInt(form.cavity_count) || 1,
       runner_weight_g: form.runner_weight_g ? parseFloat(form.runner_weight_g) : undefined,
       mold_width_mm: form.mold_width_mm ? parseFloat(form.mold_width_mm) : null,
@@ -255,12 +266,13 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="projected_area_cm2">
-                투영면적 (cm²) *
-                {form.product_width_mm && form.product_height_mm &&
-                  <span className="ml-1.5 text-xs font-normal text-indigo-500">자동계산</span>}
+                투영면적 (cm²)
+                {form.product_width_mm && form.product_height_mm
+                  ? <span className="ml-1.5 text-xs font-normal text-indigo-500">자동계산</span>
+                  : <span className="ml-1.5 text-xs font-normal text-gray-400">직접 입력 또는 제품 사이즈로 자동계산</span>}
               </Label>
               <Input id="projected_area_cm2" name="projected_area_cm2" type="number" step="0.01"
-                value={form.projected_area_cm2} onChange={handleChange} placeholder="예: 180.0" required
+                value={form.projected_area_cm2} onChange={handleChange} placeholder="제품 사이즈 입력 시 자동계산"
                 className={form.product_width_mm && form.product_height_mm ? 'bg-indigo-50 border-indigo-200' : ''} />
             </div>
             <div className="space-y-1.5">
