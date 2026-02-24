@@ -52,16 +52,18 @@ export function calcCavityLayout(count: number): [number, number] {
 
 /**
  * 제품 사이즈 + 캐비티수 → 금형 크기 추정 (mm)
- * 외곽 여유: 100 mm (양측), 캐비티 간 간격: 60 mm
+ * 외곽 여유: 기본 100mm (양측), 슬라이드 구조 시 200mm (양측)
+ * 캐비티 간 간격: 60 mm
  */
 export function calcMoldSizeFromProduct(
   productW: number,
   productH: number,
-  cavityCount: number
+  cavityCount: number,
+  hasSlide = false
 ): { width: number; height: number } {
   const [cols, rows] = calcCavityLayout(cavityCount)
-  const outer = 100 // 외곽 여유 (mm)
-  const gap   = 60  // 캐비티 간 간격 (mm)
+  const outer = hasSlide ? 200 : 100 // 슬라이드 시 외곽 여유 200mm, 기본 100mm
+  const gap   = 60                   // 캐비티 간 간격 (mm)
   return {
     width:  Math.ceil(productW * cols + gap * (cols - 1) + outer * 2),
     height: Math.ceil(productH * rows + gap * (rows - 1) + outer * 2),
@@ -74,6 +76,42 @@ export function calcMoldSizeFromProduct(
  */
 export function productDimsToProjectedArea(widthMm: number, heightMm: number): number {
   return Math.round((widthMm * heightMm) / 100 * 100) / 100
+}
+
+// ────────────────────────────────────────────────────────────────
+// notes 필드 파싱 헬퍼
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * notes 필드에서 제품 두께(mm) 추출
+ * 저장 형식: "thickness_mm:3.5" 또는 "t=3.5" 등
+ */
+export function getThicknessFromNotes(notes: string | null | undefined): number | null {
+  if (!notes) return null
+  const m = notes.match(/thickness_mm[=:]\s*([\d.]+)/i)
+    ?? notes.match(/\bt[=:]\s*([\d.]+)\s*mm/i)
+  if (m) {
+    const v = parseFloat(m[1])
+    return v > 0 ? v : null
+  }
+  return null
+}
+
+/**
+ * notes/remark 필드에 슬라이드 구조 여부 확인
+ */
+export function hasSlideCore(notes: string | null | undefined): boolean {
+  if (!notes) return false
+  return /slide/i.test(notes) || /슬라이드/.test(notes)
+}
+
+/**
+ * notes 필드에서 표면 처리(Finish) 추출
+ */
+export function getFinishFromNotes(notes: string | null | undefined): string {
+  if (!notes) return ''
+  const m = notes.match(/finish[=:]\s*([^\|;]+)/i)
+  return m ? m[1].trim() : ''
 }
 
 // 수지압력 기준값 (kgf/cm²)
@@ -120,9 +158,19 @@ function normalizeMaterialKey(material: string): string {
   return upper.split(/[\s\-_+/]/)[0]
 }
 
-export function getResinPressure(material: string): number {
+/**
+ * 수지압력 조회
+ * PC+ABS 재질이고 FINISH가 High Glossy인 경우 450 → 600 적용
+ */
+export function getResinPressure(material: string, finish?: string): number {
   const key = normalizeMaterialKey(material)
-  return RESIN_PRESSURE[key] ?? 350
+  const base = RESIN_PRESSURE[key] ?? 350
+  // PC+ABS + High Glossy: 수지압력 600 적용
+  const upper = material.toUpperCase().replace(/\s/g, '')
+  const isPC_ABS = upper.startsWith('PC+ABS') || upper.startsWith('PC/ABS') || upper.startsWith('PCABS')
+  const isHighGlossy = /high\s*gloss/i.test(finish ?? '')
+  if (isPC_ABS && isHighGlossy) return 600
+  return base
 }
 
 export function getMaterialCorrection(material: string): number {
@@ -132,11 +180,15 @@ export function getMaterialCorrection(material: string): number {
 
 /**
  * 필요 형체력 계산 (ton)
- * = 투영면적(cm²) × 수지압력(kgf/cm²) × 캐비티수 / 1000 × 안전율 1.2
+ * = 투영면적(cm²) × 수지압력(kgf/cm²) × 캐비티수 / 1000 × 안전율
+ * 안전율: 슬라이드 구조 1.3, 일반 1.2
+ * PC+ABS + High Glossy: 수지압력 600 적용
  */
 export function calcRequiredClampingForce(part: Part): number {
-  const resinPressure = getResinPressure(part.material)
-  return (part.projected_area_cm2 * resinPressure * part.cavity_count / 1000) * 1.2
+  const finish = getFinishFromNotes(part.notes)
+  const resinPressure = getResinPressure(part.material, finish)
+  const safetyFactor = hasSlideCore(part.notes) ? 1.3 : 1.2
+  return (part.projected_area_cm2 * resinPressure * part.cavity_count / 1000) * safetyFactor
 }
 
 /**
@@ -283,6 +335,8 @@ function getCTParams(material: string): CTParams {
  * 예상 사이클타임 예측 (sec)
  * - cycle_time_sec 가 없을 때 사용
  * - 재질, 중량, 투영면적, 캐비티 수 기반으로 추산
+ * - 두께 기반 냉각시간: T_c = 2.5 × t² (두께가 두꺼울수록 기하급수적 증가)
+ *   두께는 notes의 "thickness_mm:X" 값 또는 mold_depth_mm 활용
  */
 export function predictCycleTime(part: Part): number {
   const params = getCTParams(part.material)
@@ -297,5 +351,17 @@ export function predictCycleTime(part: Part): number {
 
   if (hasGF) ct *= params.gfMultiplier
 
-  return Math.round(Math.max(15, Math.min(150, ct)))
+  // 두께 기반 냉각시간 보정: T_c = 2.5 × t² (mm 단위)
+  // notes에서 우선 추출, 없으면 mold_depth_mm 참고
+  const thicknessMm = getThicknessFromNotes(part.notes) ?? null
+  if (thicknessMm !== null && thicknessMm > 0) {
+    const coolingTime = 2.5 * thicknessMm * thicknessMm
+    // 냉각시간이 현재 예측값의 냉각 기여분보다 크면 차이만큼 보정
+    const currentCooling = params.base * 0.6 // base 중 냉각 비중 약 60%
+    if (coolingTime > currentCooling) {
+      ct += coolingTime - currentCooling
+    }
+  }
+
+  return Math.round(Math.max(15, Math.min(300, ct)))
 }

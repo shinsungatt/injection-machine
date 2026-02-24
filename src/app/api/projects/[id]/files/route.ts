@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 import { parseProductSize, calcMoldSizeFromProduct, productDimsToProjectedArea } from '@/lib/algorithm'
+import { hasSlideCore } from '@/lib/algorithm'
 
 // ── 컬럼 정규화 ───────────────────────────────────────────────────────────────
 const norm = (s: unknown): string =>
@@ -83,6 +84,14 @@ const ALIASES: Record<string, string[]> = {
   is_injection: ['구분 사출'],
   part_type:    ['type', 'part type'],
   mold_type:    ['구분'],
+  remark: [
+    'remark', 'remarks', '비고', '특이사항', '메모', 'note', 'notes',
+    '참고', '코멘트', 'comment', 'comments',
+  ],
+  finish: [
+    'finish', 'surface finish', '표면처리', '도장', '도장사양',
+    '표면사양', 'surface', '마감', '마감처리', 'finishing',
+  ],
 }
 
 function mapColumn(header: string): string | null {
@@ -210,17 +219,29 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
       projArea = productDimsToProjectedArea(productW, productH)
     }
 
-    // 금형 크기: 엑셀 값 우선, 없으면 제품 사이즈 + 캐비티로 자동 계산
+    // 금형 크기: 엑셀 값 우선 (슬라이드 여부는 notes 구성 후 적용)
     let moldW = colMap.mold_width_mm  !== undefined ? (Number(row[colMap.mold_width_mm])  || null) : null
     let moldH = colMap.mold_height_mm !== undefined ? (Number(row[colMap.mold_height_mm]) || null) : null
     const moldD = colMap.mold_depth_mm !== undefined ? (Number(row[colMap.mold_depth_mm]) || null) : null
-    if (moldW === null && productW > 0 && productH > 0) {
-      const est = calcMoldSizeFromProduct(productW, productH, cavityCount)
-      moldW = est.width; moldH = est.height
-    }
 
     const ctRaw = colMap.cycle_time_sec !== undefined ? Number(row[colMap.cycle_time_sec]) : NaN
     const cycleTimeSec = !isNaN(ctRaw) && ctRaw > 0 ? Math.round(ctRaw) : null
+
+    // Remark / Finish → notes 필드 구성
+    const remarkRaw = colMap.remark !== undefined ? String(row[colMap.remark] ?? '').trim() : ''
+    const finishRaw = colMap.finish !== undefined ? String(row[colMap.finish] ?? '').trim() : ''
+    const noteParts: string[] = []
+    if (productD > 0)    noteParts.push(`thickness_mm:${productD}`)
+    if (finishRaw)       noteParts.push(`finish:${finishRaw}`)
+    if (remarkRaw)       noteParts.push(remarkRaw)
+    const notesValue = noteParts.length > 0 ? noteParts.join(' | ') : null
+
+    // 슬라이드 구조 여부 (Remark에 'Slide' 포함 시)
+    const slide = hasSlideCore(notesValue)
+    if (moldW === null && productW > 0 && productH > 0) {
+      const est = calcMoldSizeFromProduct(productW, productH, cavityCount, slide)
+      moldW = est.width; moldH = est.height
+    }
 
     parts.push({
       project_id:         projectId,
@@ -235,6 +256,7 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
       mold_height_mm:     moldH,
       mold_depth_mm:      moldD,
       cycle_time_sec:     cycleTimeSec,
+      notes:              notesValue,
     })
   }
   return { parts, sheetName }

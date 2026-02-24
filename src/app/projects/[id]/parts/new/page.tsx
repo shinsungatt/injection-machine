@@ -122,6 +122,10 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
       return
     }
     setSaving(true)
+    // 제품 두께가 입력된 경우 notes에 포함 (냉각시간 계산에 활용)
+    const depthVal = parseFloat(form.product_depth_mm)
+    const notes = depthVal > 0 ? `thickness_mm:${depthVal}` : null
+
     const payload = {
       part_number: form.part_number,
       part_name: form.part_name,
@@ -133,6 +137,7 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
       mold_width_mm: form.mold_width_mm ? parseFloat(form.mold_width_mm) : null,
       mold_height_mm: form.mold_height_mm ? parseFloat(form.mold_height_mm) : null,
       mold_depth_mm: form.mold_depth_mm ? parseFloat(form.mold_depth_mm) : null,
+      notes,
     }
     const res = await fetch(`/api/projects/${id}/parts`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
