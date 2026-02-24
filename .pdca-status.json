@@ -1,0 +1,12 @@
+{
+  "injection-machine": {
+    "phase": "archived",
+    "matchRate": 100,
+    "iterationCount": 0,
+    "startedAt": "2025-12-17T00:00:00Z",
+    "completedAt": "2026-02-24T00:00:00Z",
+    "archivedAt": "2026-02-24T00:00:00Z",
+    "archivedTo": "docs/archive/2026-02/injection-machine/",
+    "deployUrl": "https://injection-machine.vercel.app"
+  }
+}

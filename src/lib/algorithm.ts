@@ -203,15 +203,25 @@ export function calcRequiredShotWeight(part: Part): number {
 
 /**
  * 금형이 설비에 들어가는지 체크
+ * - 금형 가로/세로: 타이바 + 형판(platen) 이내
+ * - 금형 두께(깊이): 설비의 설치 가능 금형두께 범위(min~max) 이내
  */
 export function checkMoldFit(part: Part, machine: Machine): boolean {
-  if (!part.mold_width_mm || !part.mold_height_mm) return true // 금형 크기 미입력 시 통과
-  return (
-    part.mold_width_mm <= machine.tie_bar_x_mm &&
-    part.mold_height_mm <= machine.tie_bar_y_mm &&
-    part.mold_width_mm <= machine.platen_width_mm &&
-    part.mold_height_mm <= machine.platen_height_mm
-  )
+  // 금형 가로/세로 크기 체크 (미입력 시 통과)
+  if (part.mold_width_mm && part.mold_height_mm) {
+    const widthOk  = part.mold_width_mm  <= machine.tie_bar_x_mm && part.mold_width_mm  <= machine.platen_width_mm
+    const heightOk = part.mold_height_mm <= machine.tie_bar_y_mm && part.mold_height_mm <= machine.platen_height_mm
+    if (!widthOk || !heightOk) return false
+  }
+
+  // 금형 두께 범위 체크 (미입력 시 통과, 설비의 mold_depth 범위 값이 있을 때만 체크)
+  if (part.mold_depth_mm && machine.mold_depth_min_mm > 0) {
+    const depthOk = part.mold_depth_mm >= machine.mold_depth_min_mm &&
+                    part.mold_depth_mm <= machine.mold_depth_max_mm
+    if (!depthOk) return false
+  }
+
+  return true
 }
 
 export type RecommendationResult = {
@@ -260,7 +270,21 @@ export function calculateRecommendations(
     else if (!clampingOk) notes.push(`형체력 부족 (필요: ${requiredClamping.toFixed(0)}T > 보유: ${machine.clamping_force_ton}T)`)
     if (!weightOk) notes.push('중량 미입력 (사출량 계산 불가)')
     else if (!shotOk) notes.push(`사출량 부족 (필요: ${requiredShot.toFixed(0)}g > 보유: ${machine.shot_weight_max_g}g)`)
-    if (!moldFit) notes.push('금형 크기 초과')
+    if (!moldFit) {
+      // 금형 가로/세로 초과 vs 두께 범위 벗어남 구분
+      const sizeExceeded = (part.mold_width_mm && part.mold_height_mm) && (
+        part.mold_width_mm > machine.tie_bar_x_mm ||
+        part.mold_height_mm > machine.tie_bar_y_mm ||
+        part.mold_width_mm > machine.platen_width_mm ||
+        part.mold_height_mm > machine.platen_height_mm
+      )
+      const depthOutOfRange = part.mold_depth_mm && machine.mold_depth_min_mm > 0 && (
+        part.mold_depth_mm < machine.mold_depth_min_mm ||
+        part.mold_depth_mm > machine.mold_depth_max_mm
+      )
+      if (sizeExceeded) notes.push('금형 크기 초과 (타이바/형판)')
+      if (depthOutOfRange) notes.push(`금형 두께 범위 불일치 (금형: ${part.mold_depth_mm}mm, 설비범위: ${machine.mold_depth_min_mm}~${machine.mold_depth_max_mm}mm)`)
+    }
     if (isEligible && (utilizationClamping < 60 || utilizationClamping > 85)) {
       notes.push(`형체력 활용률 ${utilizationClamping.toFixed(0)}% (권장: 60~85%)`)
     }

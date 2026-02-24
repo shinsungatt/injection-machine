@@ -19,6 +19,10 @@ export type Machine = {
   tie_bar_y_mm: number
   daylight_max_mm: number
   screw_diameter_mm: number
+  mold_depth_min_mm: number
+  mold_depth_max_mm: number
+  motor_kw: number | null
+  heater_kw: number | null
   notes: string | null
   is_active: boolean
   created_at: string

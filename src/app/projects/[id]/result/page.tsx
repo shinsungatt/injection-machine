@@ -603,7 +603,17 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
                           <span className="text-lg">{RANK_ICON[rec.rank]}</span>
                           <div>
                             <p className="font-semibold text-sm">{rec.machine?.name}</p>
-                            <p className="text-xs text-gray-500">{rec.machine?.clamping_force_ton}T / {rec.machine?.shot_weight_max_g}g</p>
+                            <p className="text-xs text-gray-500">{rec.machine?.clamping_force_ton}T / 사출량 {rec.machine?.shot_weight_max_g}g</p>
+                            {(rec.machine?.motor_kw != null || rec.machine?.heater_kw != null) && (
+                              <p className="text-xs text-gray-400">
+                                모터 {rec.machine?.motor_kw ?? '-'}kW / 히터 {rec.machine?.heater_kw ?? '-'}kW
+                              </p>
+                            )}
+                            {rec.machine?.mold_depth_min_mm != null && rec.machine.mold_depth_min_mm > 0 && (
+                              <p className="text-xs text-gray-400">
+                                금형두께 {rec.machine.mold_depth_min_mm}~{rec.machine.mold_depth_max_mm}mm
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="space-y-2">
