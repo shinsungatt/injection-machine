@@ -28,6 +28,7 @@ const ALIASES: Record<string, string[]> = {
   material: [
     'material', '원소재', '원재료', '재질', '소재명', '소재', '재료',
     '소재정보 소재명', '원자재', 'mat',
+    '생산정보 재질',  // 현대 RFQ: "생산정보" 아래 "재질" 서브헤더 병합
   ],
   part_weight_g: [
     'part_weight_g', 'weight g', 'weight unit', '중량', '설계중량',
@@ -37,6 +38,7 @@ const ALIASES: Record<string, string[]> = {
   runner_weight_g: [
     'runner_weight_g', 'r/sprue g', 'runner', '런너', 'sprue', 'runner weight',
     '스프루 런너 중량', '스프루런너중량', '런너 중량', '런너중량', '스프루중량',
+    '사출정보 s/r 중량',  // 현대 RFQ: 병합 헤더 "사출정보 S/R 중량(g)예상"
   ],
   cavity_count: [
     'cavity_count', 'cavity', 'q ty', 'qty', '캐비티', '수량',
@@ -63,6 +65,7 @@ const ALIASES: Record<string, string[]> = {
     'product_width_mm', 'part_width_mm',
     '제품사이즈 가로', '제품사이즈가로', '제품 가로', '제품가로',
     '가로', '가로(mm)', '가로 mm', 'product width', 'part width',
+    'size mm 가로',  // 현대 RFQ: "SIZE (mm)" 아래 "가로" 서브헤더 병합
   ],
   product_height_mm: [
     'product_height_mm', 'part_height_mm',
@@ -188,6 +191,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const headers = headerRow.map((curr, i) => {
     const sub = isSubHeader ? (nextRow[i] ?? '') : ''
     if (curr && sub && sub !== curr) return `${curr} ${sub}`
+    if (!curr && sub) return sub  // 병합셀로 부모가 비어있으면 서브헤더 직접 사용
     return curr || `col_${i}`
   })
 

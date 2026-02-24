@@ -27,6 +27,7 @@ const ALIASES: Record<string, string[]> = {
   material: [
     'material', '원소재', '원재료', '재질', '소재명', '소재', '재료',
     '소재정보 소재명', '원자재', 'mat',
+    '생산정보 재질',  // 현대 RFQ: "생산정보" 아래 "재질" 서브헤더
   ],
   part_weight_g: [
     'part_weight_g', 'weight g', 'weight unit', '중량', '설계중량',
@@ -36,6 +37,7 @@ const ALIASES: Record<string, string[]> = {
   runner_weight_g: [
     'runner_weight_g', 'r/sprue g', 'runner', '런너', 'sprue', 'runner weight',
     '스프루 런너 중량', '스프루런너중량', '런너 중량', '런너중량', '스프루중량',
+    '사출정보 s/r 중량',  // 현대 RFQ: 병합 헤더 "사출정보 S/R 중량(g)예상" (prefix 매칭)
   ],
   cavity_count: [
     'cavity_count', 'cavity', 'q ty', 'qty', '캐비티', '수량',
@@ -62,6 +64,7 @@ const ALIASES: Record<string, string[]> = {
     'product_width_mm', 'part_width_mm',
     '제품사이즈 가로', '제품사이즈가로', '제품 가로', '제품가로',
     '가로', '가로(mm)', '가로 mm', 'product width', 'part width',
+    'size mm 가로',  // 현대 RFQ: "SIZE (mm)" 아래 "가로" 서브헤더
   ],
   product_height_mm: [
     'product_height_mm', 'part_height_mm',
@@ -110,6 +113,15 @@ function scoreRow(row: unknown[]): number {
   return row.filter(c => mapColumn(String(c ?? '')) !== null).length
 }
 
+function getFieldsOfRow(row: unknown[]): Set<string> {
+  const s = new Set<string>()
+  for (const c of row) {
+    const f = mapColumn(String(c ?? ''))
+    if (f) s.add(f)
+  }
+  return s
+}
+
 // ── BOM 엑셀 파싱 ─────────────────────────────────────────────────────────────
 function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
   const workbook = XLSX.read(arrayBuffer, { type: 'array' })
@@ -141,15 +153,32 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
   }
   if (bestScore === 0) return { parts: [], sheetName }
 
+  // ── 서브헤더 감지 (현대 RFQ 등 2줄 헤더 대응) ────────────────────────────
+  // 예: 행1 "생산정보 / SIZE(mm)" → 행2 "재질 / 가로 / 세로 / 높이 / C/Time"
+  const headerRowFields = getFieldsOfRow(rawRows[headerIdx])
+  const nextRowRaw = headerIdx + 1 < rawRows.length ? rawRows[headerIdx + 1] : []
+  const nextRowFields = getFieldsOfRow(nextRowRaw)
+  const newFieldsInNext = [...nextRowFields].filter(f => !headerRowFields.has(f))
+  const isSubHeader = newFieldsInNext.length > 0
+
+  // ── 컬럼 헤더 병합: 부모+자식 결합, 부모가 비어있으면 자식 값 직접 사용 ──
+  const headerRow = rawRows[headerIdx].map(c => String(c ?? '').trim())
+  const nextRow = nextRowRaw.map(c => String(c ?? '').trim())
+  const headers = headerRow.map((curr, i) => {
+    const sub = isSubHeader ? (nextRow[i] ?? '') : ''
+    if (curr && sub && sub !== curr) return `${curr} ${sub}`
+    if (!curr && sub) return sub  // 부모 셀이 병합으로 비어있으면 서브헤더 값 직접 사용
+    return curr || `col_${i}`
+  })
+
   // 컬럼 인덱스 맵 구성
-  const headers = rawRows[headerIdx].map(c => String(c ?? '').trim())
   const colMap: Record<string, number> = {}
   for (let i = 0; i < headers.length; i++) {
     const field = mapColumn(headers[i])
     if (field && !(field in colMap)) colMap[field] = i
   }
 
-  const dataStart = headerIdx + 1
+  const dataStart = headerIdx + (isSubHeader ? 2 : 1)
   const seenNumbers = new Set<string>()
   const parts = []
 

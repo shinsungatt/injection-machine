@@ -196,22 +196,27 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const handleFileUpload = async (type: string, file: File) => {
     setUploading(type)
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('type', type)
-    const res = await fetch(`/api/projects/${projectId}/files`, { method: 'POST', body: fd })
-    const data = await res.json()
-    setUploading(null)
-    if (!res.ok) {
-      toast.error(data.error || '업로드 실패')
-      return
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('type', type)
+      const res = await fetch(`/api/projects/${projectId}/files`, { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || '업로드 실패')
+        return
+      }
+      if (type === 'excel') {
+        toast.success(`파트리스트 업로드 완료 — ${data.count}개 파트 등록`)
+      } else {
+        toast.success(`${file.name} 업로드 완료`)
+      }
+      fetchData(projectId)
+    } catch {
+      toast.error('업로드 중 오류가 발생했습니다. 서버 상태를 확인하세요.')
+    } finally {
+      setUploading(null)
     }
-    if (type === 'excel') {
-      toast.success(`파트리스트 업로드 완료 — ${data.count}개 파트 등록`)
-    } else {
-      toast.success(`${file.name} 업로드 완료`)
-    }
-    fetchData(projectId)
   }
 
   const handleFileDelete = async (fileId: string) => {
