@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   ChevronLeft, Plus, BarChart2, Trash2, RefreshCw,
-  FileSpreadsheet, FileText, Box, Layers, X, Upload, CheckCircle2,
+  FileSpreadsheet, FileText, Box, Layers, X, Upload, CheckCircle2, CheckSquare,
 } from 'lucide-react'
 import type { Project, Part } from '@/lib/supabase'
 import { calcRequiredClampingForce, predictCycleTime } from '@/lib/algorithm'
@@ -169,6 +169,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
   const [uploading, setUploading] = useState<string | null>(null)
+  const [selectedParts, setSelectedParts] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const fetchData = useCallback((id: string) => {
     Promise.all([
@@ -190,8 +192,48 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const handleDeletePart = async (partId: string, name: string) => {
     if (!confirm(`"${name}" 파트를 삭제하시겠습니까?`)) return
     const res = await fetch(`/api/parts/${partId}`, { method: 'DELETE' })
-    if (res.ok) { toast.success('삭제되었습니다.'); fetchData(projectId) }
-    else toast.error('삭제 실패')
+    if (res.ok) {
+      toast.success('삭제되었습니다.')
+      setSelectedParts(prev => { const s = new Set(prev); s.delete(partId); return s })
+      fetchData(projectId)
+    } else toast.error('삭제 실패')
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedParts.size === 0) return
+    if (!confirm(`선택한 ${selectedParts.size}개 파트를 삭제하시겠습니까?`)) return
+    setBulkDeleting(true)
+    const res = await fetch(`/api/projects/${projectId}/parts`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedParts) }),
+    })
+    setBulkDeleting(false)
+    if (res.ok) {
+      const data = await res.json()
+      toast.success(`${data.deleted}개 파트가 삭제되었습니다.`)
+      setSelectedParts(new Set())
+      fetchData(projectId)
+    } else {
+      const err = await res.json()
+      toast.error(err.error || '삭제 실패')
+    }
+  }
+
+  const toggleSelectPart = (id: string) => {
+    setSelectedParts(prev => {
+      const s = new Set(prev)
+      s.has(id) ? s.delete(id) : s.add(id)
+      return s
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedParts.size === parts.length) {
+      setSelectedParts(new Set())
+    } else {
+      setSelectedParts(new Set(parts.map(p => p.id)))
+    }
   }
 
   const handleFileUpload = async (type: string, file: File) => {
@@ -312,11 +354,27 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">파트 목록 ({parts.length}개)</CardTitle>
-          {parts.length > 0 && (
-            <p className="text-xs text-gray-400">
-              예상TON = 투영면적 × 수지압력 × 캐비티 / 1000 × 1.2
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            {selectedParts.size > 0 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-1.5 h-8"
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+              >
+                {bulkDeleting
+                  ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  : <Trash2 className="h-3.5 w-3.5" />}
+                선택 삭제 ({selectedParts.size}개)
+              </Button>
+            )}
+            {parts.length > 0 && (
+              <p className="text-xs text-gray-400">
+                예상TON = 투영면적 × 수지압력 × 캐비티 / 1000 × 1.2
+              </p>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {parts.length === 0 ? (
@@ -328,6 +386,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <button
+                        onClick={toggleSelectAll}
+                        className="flex items-center justify-center w-full"
+                        title={selectedParts.size === parts.length ? '전체 해제' : '전체 선택'}
+                      >
+                        {selectedParts.size === parts.length && parts.length > 0
+                          ? <CheckSquare className="h-4 w-4 text-blue-600" />
+                          : <div className={`h-4 w-4 rounded border-2 ${selectedParts.size > 0 ? 'border-blue-400 bg-blue-100' : 'border-gray-300'}`} />
+                        }
+                      </button>
+                    </TableHead>
                     <TableHead className="w-32">파트번호</TableHead>
                     <TableHead>품명</TableHead>
                     <TableHead>재료</TableHead>
@@ -343,8 +413,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <TableBody>
                   {parts.map(p => {
                     const expectedTon = calcRequiredClampingForce(p)
+                    const isSelected = selectedParts.has(p.id)
                     return (
-                      <TableRow key={p.id}>
+                      <TableRow
+                        key={p.id}
+                        className={isSelected ? 'bg-blue-50' : ''}
+                        onClick={() => toggleSelectPart(p.id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <TableCell onClick={e => e.stopPropagation()} className="px-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectPart(p.id)}
+                            className="h-4 w-4 accent-blue-600 cursor-pointer"
+                          />
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{p.part_number}</TableCell>
                         <TableCell className="font-medium">{p.part_name}</TableCell>
                         <TableCell>
@@ -371,7 +455,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                         <TableCell className="text-right font-mono text-xs text-gray-400">
                           {p.mold_width_mm && p.mold_height_mm ? `${p.mold_width_mm}×${p.mold_height_mm}` : '-'}
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={e => e.stopPropagation()}>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600"
                             onClick={() => handleDeletePart(p.id, p.part_name)}>
                             <Trash2 className="h-3.5 w-3.5" />

@@ -12,6 +12,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json(data)
 }
 
+// 일괄 삭제: DELETE body { ids: string[] }
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const body = await req.json().catch(() => ({}))
+  const ids: string[] = Array.isArray(body.ids) ? body.ids : []
+  if (ids.length === 0) return NextResponse.json({ error: '삭제할 파트 ID가 없습니다.' }, { status: 400 })
+
+  const { error } = await supabase
+    .from('parts')
+    .delete()
+    .in('id', ids)
+    .eq('project_id', id)  // 보안: 해당 프로젝트 파트만 삭제
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true, deleted: ids.length })
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const body = await req.json()

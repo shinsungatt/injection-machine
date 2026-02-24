@@ -18,7 +18,7 @@ import {
 import type { Part, Machine, Recommendation } from '@/lib/supabase'
 import {
   predictCycleTime, getResinPressure, getMaterialCorrection,
-  calcRequiredClampingForce, calcRequiredShotWeight,
+  calcRequiredClampingForce, calcRequiredShotWeight, getFinishFromNotes, hasSlideCore,
 } from '@/lib/algorithm'
 
 type ResultItem = {
@@ -309,11 +309,17 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
       const top = r.recommendations.find(rec => rec.rank === 1)
       const actualCt = r.part.cycle_time_sec
       const predictedCt = predictCycleTime(r.part)
+      const p = r.part
+      const resinP = getResinPressure(p.material, getFinishFromNotes(p.notes))
+      const safety = hasSlideCore(p.notes) ? 1.3 : 1.2
+      const corr = getMaterialCorrection(p.material)
+      const runner = p.runner_weight_g ?? p.part_weight_g * 0.15
+      const requiredShot = calcRequiredShotWeight(p)
       return {
-        partId: r.part.id,
-        partNumber: r.part.part_number,
-        partName: r.part.part_name,
-        material: r.part.material,
+        partId: p.id,
+        partNumber: p.part_number,
+        partName: p.part_name,
+        material: p.material,
         expectedTon: top?.required_clamping_force_ton ?? 0,
         ct: actualCt,
         displayCt: actualCt ?? predictedCt,
@@ -323,6 +329,19 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
         clampingPct: top?.utilization_clamping_pct ?? 0,
         hogiNum: top?.machine?.name ? extractHogiNumber(top.machine.name) : 999,
         hasRec: !!top,
+        // 산출근거
+        calc: {
+          area: p.projected_area_cm2,
+          resinP,
+          safety,
+          cavity: p.cavity_count,
+          weight: p.part_weight_g,
+          runner: parseFloat(runner.toFixed(1)),
+          corr: parseFloat(corr.toFixed(3)),
+          requiredShot: parseFloat(requiredShot.toFixed(1)),
+          ctIsPredicted: actualCt == null,
+          ctValue: actualCt ?? predictedCt,
+        },
       }
     })
     .sort((a, b) => {
@@ -489,6 +508,7 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
                         </TableHead>
                       ))}
                       <TableHead className="min-w-36">비고</TableHead>
+                      <TableHead className="min-w-56 text-xs text-slate-500 font-normal">산출근거</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -543,6 +563,33 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
                               onSave={() => saveNote(row.partId)}
                               saving={savingNoteId === row.partId}
                             />
+                          </TableCell>
+                          <TableCell className="min-w-56">
+                            <div className="font-mono text-xs text-slate-500 space-y-1 leading-relaxed">
+                              {/* 형체력 산출 */}
+                              <div className="flex flex-wrap items-center gap-x-1">
+                                <span className="text-slate-400 shrink-0">형체력</span>
+                                <span>{row.calc.area}×{row.calc.resinP}×{row.calc.cavity}÷1000×{row.calc.safety}</span>
+                                <span className="text-slate-300">=</span>
+                                <span className="font-semibold text-slate-700">{row.expectedTon.toFixed(1)}T</span>
+                              </div>
+                              {/* 사출량 산출 */}
+                              {row.calc.weight > 0 && (
+                                <div className="flex flex-wrap items-center gap-x-1">
+                                  <span className="text-slate-400 shrink-0">사출량</span>
+                                  <span>({row.calc.weight}×{row.calc.cavity}+{row.calc.runner})÷0.8×{row.calc.corr}</span>
+                                  <span className="text-slate-300">=</span>
+                                  <span className="font-semibold text-slate-700">{row.calc.requiredShot}g</span>
+                                </div>
+                              )}
+                              {/* C/T */}
+                              <div className="flex items-center gap-x-1">
+                                <span className="text-slate-400 shrink-0">C/T</span>
+                                <span className={row.calc.ctIsPredicted ? 'text-blue-500' : 'text-slate-600'}>
+                                  {row.calc.ctValue}sec{row.calc.ctIsPredicted ? ' (예측)' : ' (실측)'}
+                                </span>
+                              </div>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
