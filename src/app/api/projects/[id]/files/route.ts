@@ -316,62 +316,77 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const formData = await req.formData()
-  const file = formData.get('file') as File
-  const fileType = formData.get('type') as string
 
-  if (!file) return NextResponse.json({ error: '파일이 없습니다.' }, { status: 400 })
-  if (!fileType) return NextResponse.json({ error: 'file type이 필요합니다.' }, { status: 400 })
+  try {
+    const formData = await req.formData()
+    const file = formData.get('file') as File
+    const fileType = formData.get('type') as string
 
-  // ── Excel: 파싱 후 parts 테이블에 저장 ─────────────────────────────────
-  if (fileType === 'excel') {
-    const arrayBuffer = await file.arrayBuffer()
-    const { parts, sheetName } = parsePartsFromBuffer(arrayBuffer, id)
-    if (parts.length === 0) {
-      return NextResponse.json({
-        error: '유효한 파트 데이터를 찾을 수 없습니다. 품명(part_name) 또는 파트번호(품번/도번) 컬럼이 포함된 파일인지 확인하세요.'
-      }, { status: 400 })
+    if (!file) return NextResponse.json({ error: '파일이 없습니다.' }, { status: 400 })
+    if (!fileType) return NextResponse.json({ error: 'file type이 필요합니다.' }, { status: 400 })
+
+    // ── Excel: 파싱 후 parts 테이블에 저장 ─────────────────────────────────
+    if (fileType === 'excel') {
+      const arrayBuffer = await file.arrayBuffer()
+      let parsed: ReturnType<typeof parsePartsFromBuffer>
+      try {
+        parsed = parsePartsFromBuffer(arrayBuffer, id)
+      } catch (parseErr) {
+        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr)
+        console.error('[POST /files] Excel parse error:', msg)
+        return NextResponse.json({ error: `Excel 파일 파싱 실패: ${msg}` }, { status: 400 })
+      }
+      const { parts, sheetName } = parsed
+      if (parts.length === 0) {
+        return NextResponse.json({
+          error: '유효한 파트 데이터를 찾을 수 없습니다. 품명(part_name) 또는 파트번호(품번/도번) 컬럼이 포함된 파일인지 확인하세요.'
+        }, { status: 400 })
+      }
+      const { data, error } = await supabase.from('parts').insert(parts).select()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      await supabase.from('projects').update({ status: 'analyzing' }).eq('id', id)
+
+      await supabase.from('project_files').insert({
+        project_id: id, file_type: 'excel',
+        name: file.name, file_path: file.name, file_size: file.size,
+      })
+      return NextResponse.json({ success: true, count: data?.length ?? 0, sheet: sheetName })
     }
-    const { data, error } = await supabase.from('parts').insert(parts).select()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    await supabase.from('projects').update({ status: 'analyzing' }).eq('id', id)
 
-    await supabase.from('project_files').insert({
-      project_id: id, file_type: 'excel',
-      name: file.name, file_path: file.name, file_size: file.size,
-    })
-    return NextResponse.json({ success: true, count: data?.length ?? 0, sheet: sheetName })
+    // ── PDF / CAD / STP: base64로 DB에 직접 저장 ──────────────────────────
+    // (Supabase Storage 버킷 불필요)
+    if (file.size > 4 * 1024 * 1024) {
+      return NextResponse.json({ error: '파일 크기가 4MB를 초과합니다.' }, { status: 400 })
+    }
+
+    const arrayBuffer = await file.arrayBuffer()
+    const base64 = Buffer.from(arrayBuffer).toString('base64')
+
+    const { data: fileRecord, error: dbError } = await supabase
+      .from('project_files')
+      .insert({
+        project_id: id,
+        file_type: fileType,
+        name: file.name,
+        file_path: file.name,
+        file_size: file.size,
+        file_data: base64,
+      })
+      .select('id, project_id, file_type, name, file_size, created_at')
+      .single()
+
+    if (dbError) {
+      console.error('[POST /files] Supabase insert error:', dbError.message, dbError.details, dbError.hint)
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
+    }
+
+    // 다운로드 URL은 파일 ID 기반으로 코드에서 생성
+    const file_url = `/api/projects/${id}/files/${fileRecord.id}/download`
+
+    return NextResponse.json({ ...fileRecord, file_url }, { status: 201 })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[POST /files] Unhandled error:', msg)
+    return NextResponse.json({ error: `서버 오류: ${msg}` }, { status: 500 })
   }
-
-  // ── PDF / CAD / STP: base64로 DB에 직접 저장 ──────────────────────────
-  // (Supabase Storage 버킷 불필요)
-  if (file.size > 20 * 1024 * 1024) {
-    return NextResponse.json({ error: '파일 크기가 20MB를 초과합니다.' }, { status: 400 })
-  }
-
-  const arrayBuffer = await file.arrayBuffer()
-  const base64 = Buffer.from(arrayBuffer).toString('base64')
-
-  const { data: fileRecord, error: dbError } = await supabase
-    .from('project_files')
-    .insert({
-      project_id: id,
-      file_type: fileType,
-      name: file.name,
-      file_path: file.name,
-      file_size: file.size,
-      file_data: base64,
-    })
-    .select('id, project_id, file_type, name, file_size, created_at')
-    .single()
-
-  if (dbError) {
-    console.error('[POST /files] Supabase insert error:', dbError.message, dbError.details, dbError.hint)
-    return NextResponse.json({ error: dbError.message }, { status: 500 })
-  }
-
-  // 다운로드 URL은 파일 ID 기반으로 코드에서 생성
-  const file_url = `/api/projects/${id}/files/${fileRecord.id}/download`
-
-  return NextResponse.json({ ...fileRecord, file_url }, { status: 201 })
 }

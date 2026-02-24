@@ -201,19 +201,28 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       fd.append('file', file)
       fd.append('type', type)
       const res = await fetch(`/api/projects/${projectId}/files`, { method: 'POST', body: fd })
-      const data = await res.json()
       if (!res.ok) {
-        toast.error(data.error || '업로드 실패')
+        let errorMsg = '업로드 실패'
+        try {
+          const errData = await res.json()
+          errorMsg = errData.error || errorMsg
+        } catch {
+          if (res.status === 413) errorMsg = '파일 크기가 너무 큽니다. (최대 4.5MB)'
+          else errorMsg = `서버 오류 (${res.status})`
+        }
+        toast.error(errorMsg)
         return
       }
+      const data = await res.json()
       if (type === 'excel') {
         toast.success(`파트리스트 업로드 완료 — ${data.count}개 파트 등록`)
       } else {
         toast.success(`${file.name} 업로드 완료`)
       }
       fetchData(projectId)
-    } catch {
-      toast.error('업로드 중 오류가 발생했습니다. 서버 상태를 확인하세요.')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '알 수 없는 오류'
+      toast.error(`업로드 중 오류가 발생했습니다: ${msg}`)
     } finally {
       setUploading(null)
     }
