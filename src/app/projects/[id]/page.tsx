@@ -329,7 +329,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-32">파트번호</TableHead>
-                    <TableHead>파트명</TableHead>
+                    <TableHead>품명</TableHead>
                     <TableHead>재료</TableHead>
                     <TableHead className="text-right bg-yellow-50 font-semibold text-yellow-700">예상TON</TableHead>
                     <TableHead className="text-right bg-yellow-50 font-semibold text-yellow-700">C/T(sec)</TableHead>

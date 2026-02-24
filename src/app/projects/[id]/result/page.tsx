@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronLeft, RefreshCw, AlertTriangle, Download } from 'lucide-react'
+import { ChevronLeft, RefreshCw, AlertTriangle, Download, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine, Cell,
@@ -169,6 +169,17 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
   const [reanalyzing, setReanalyzing] = useState(false)
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({})
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
 
   const fetchResults = useCallback((id: string) => {
     fetch(`/api/projects/${id}/recommend`)
@@ -292,7 +303,7 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
     toast.success('Excel 파일이 다운로드되었습니다.')
   }
 
-  // ─── 요약표 데이터: 파트별 1순위 설비, 호기 번호 내림차순 ─────────────────
+  // ─── 요약표 데이터: 파트별 1순위 설비 ───────────────────────────────────────
   const summaryRows = results
     .map(r => {
       const top = r.recommendations.find(rec => rec.rank === 1)
@@ -314,8 +325,22 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
         hasRec: !!top,
       }
     })
-    // 호기 번호 내림차순 (24호기 → 1호기), 추천없음 맨 뒤
     .sort((a, b) => {
+      if (sortKey) {
+        // 사용자 선택 정렬
+        const aVal = a[sortKey as keyof typeof a]
+        const bVal = b[sortKey as keyof typeof b]
+        if (aVal == null && bVal == null) return 0
+        if (aVal == null) return 1
+        if (bVal == null) return -1
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          const cmp = aVal.localeCompare(bVal, 'ko', { numeric: true })
+          return sortDir === 'asc' ? cmp : -cmp
+        }
+        const cmp = (aVal as number) - (bVal as number)
+        return sortDir === 'asc' ? cmp : -cmp
+      }
+      // 기본 정렬: 호기 번호 내림차순 (24호기 → 1호기), 추천없음 맨 뒤
       if (!a.hasRec && b.hasRec) return 1
       if (a.hasRec && !b.hasRec) return -1
       return b.hogiNum - a.hogiNum
@@ -421,7 +446,9 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 파트별 예상TON / C/T → 추천 호기
-                <span className="text-xs font-normal text-gray-400">(호기 번호 내림차순)</span>
+                <span className="text-xs font-normal text-gray-400">
+                  {sortKey ? `${sortDir === 'asc' ? '▲' : '▼'} 정렬 중 — 헤더 클릭으로 정렬 변경` : '헤더 클릭으로 정렬'}
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -429,14 +456,38 @@ export default function ResultPage({ params }: { params: Promise<{ id: string }>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-32">파트번호</TableHead>
-                      <TableHead>파트명</TableHead>
-                      <TableHead>재료</TableHead>
-                      <TableHead className="text-right bg-yellow-50 text-yellow-700 font-semibold">예상TON</TableHead>
-                      <TableHead className="text-right bg-yellow-50 text-yellow-700 font-semibold">C/T(sec)</TableHead>
-                      <TableHead className="text-center">추천 호기</TableHead>
-                      <TableHead className="text-right">설비 용량</TableHead>
-                      <TableHead className="text-right">형체력 활용률</TableHead>
+                      {([
+                        { key: 'partNumber', label: '파트번호', cls: 'w-32' },
+                        { key: 'partName',   label: '품명',    cls: '' },
+                        { key: 'material',   label: '재료',    cls: '' },
+                      ] as const).map(col => (
+                        <TableHead key={col.key} className={col.cls}>
+                          <button onClick={() => handleSort(col.key)}
+                            className="flex items-center gap-1 hover:text-blue-600 transition-colors">
+                            {col.label}
+                            {sortKey === col.key
+                              ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
+                              : <ArrowUpDown className="h-3 w-3 text-gray-300" />}
+                          </button>
+                        </TableHead>
+                      ))}
+                      {([
+                        { key: 'expectedTon',    label: '예상TON',      cls: 'text-right bg-yellow-50 text-yellow-700 font-semibold' },
+                        { key: 'displayCt',      label: 'C/T(sec)',     cls: 'text-right bg-yellow-50 text-yellow-700 font-semibold' },
+                        { key: 'machineName',    label: '추천 호기',    cls: 'text-center' },
+                        { key: 'machineCapacity',label: '설비 용량',    cls: 'text-right' },
+                        { key: 'clampingPct',    label: '형체력 활용률', cls: 'text-right' },
+                      ] as const).map(col => (
+                        <TableHead key={col.key} className={col.cls}>
+                          <button onClick={() => handleSort(col.key)}
+                            className="flex items-center gap-1 hover:text-blue-600 transition-colors w-full justify-end">
+                            {col.label}
+                            {sortKey === col.key
+                              ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
+                              : <ArrowUpDown className="h-3 w-3 text-gray-300" />}
+                          </button>
+                        </TableHead>
+                      ))}
                       <TableHead className="min-w-36">비고</TableHead>
                     </TableRow>
                   </TableHeader>
