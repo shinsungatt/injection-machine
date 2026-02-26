@@ -110,14 +110,16 @@ const ALIASES: Record<string, string[]> = {
   mold_type:    ['구분'],              // Pioneer: "MOLD"=injection, "ASSY"=skip
 }
 
-// 비사출 재료 패턴 — SUS, 알루미늄, 실리콘, 고무 등
-const NON_INJECTION_MATERIAL = /^(sus|s45c|s50c|al|알루미늄|aluminum|aluminium|실리콘|silicon|silicone|고무|rubber|epdm|금속|metal|steel|iron|brass|동|구리|copper|zinc|아연|스프링|spring|-+)$/i
+// 비사출 재료 패턴 — SUS/SUS304, 알루미늄/AL6061, 실리콘, EHS(그리스) 등
+// ※ $ 앵커 대신 prefix 패턴 사용: sus[\d\-]* 로 sus304, sus-304 모두 매칭
+const NON_INJECTION_MATERIAL = /^(sus[\d\-]*|s[0-9]+c|stainless|steel|iron|brass|동판?|구리|copper|zinc|아연|알루미늄|aluminum|aluminium|al\d+|실리콘|silicon|silicone|고무|rubber|epdm|금속|metal|스프링|spring|ehs|grease|oil|lubricant|-+)$/i
 
 function isNonInjectionMaterial(mat: string): boolean {
   const m = mat.trim().toLowerCase()
   if (!m || m === '-' || m === '—' || m === '–') return true
-  // 앞 단어만 추출 (예: "SUS304" → "sus304")
-  const first = m.split(/[\s/+,;(（]/)[0]
+  // 앞 단어만 추출 (공백, /, +, 쉼표, 세미콜론, 괄호, 하이픈으로 분리)
+  // 하이픈 추가: "SUS-304" → "sus", "PC-ABS" → "pc"(사출 유지)
+  const first = m.split(/[\s/+,;(（\-]/)[0]
   return NON_INJECTION_MATERIAL.test(first)
 }
 
@@ -218,12 +220,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // ── 2. Sub-header detection (LW1 style two-row headers) ──────────────────
-  // A row is a sub-header if it matches NEW fields not covered by the main header row
   const headerRowFields = getFieldsOfRow(rawRows[headerIdx])
   const nextRowRaw = headerIdx + 1 < rawRows.length ? rawRows[headerIdx + 1] : []
   const nextRowFields = getFieldsOfRow(nextRowRaw)
   const newFieldsInNext = [...nextRowFields].filter(f => !headerRowFields.has(f))
-  const isSubHeader = newFieldsInNext.length > 0
+  // 서브헤더 조건: 새 필드가 있거나 OR next row에 인식 컬럼이 2개 이상 (WOORY XV1 등)
+  // → isSubHeader=false 로 cavity/runner 등 완전 누락되는 케이스 방지
+  const isSubHeader = newFieldsInNext.length > 0 || nextRowFields.size >= 2
 
   // ── 3. Build merged column headers ───────────────────────────────────────
   const headerRow = rawRows[headerIdx].map(c => String(c ?? '').trim())
@@ -242,6 +245,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   for (let i = 0; i < headers.length; i++) {
     const field = mapColumn(headers[i])
     if (field && !(field in colMap)) colMap[field] = i
+  }
+
+  // ── 4-B. 서브헤더 직접 스캔 (병합 alias 미일치 보완) ────────────────────
+  // WOORY XV1: "PILOT 금형비 형사양" alias 미일치 시에도 row5의 "형사양" 직접 인식
+  if (isSubHeader) {
+    for (let i = 0; i < nextRowRaw.length; i++) {
+      const field = mapColumn(String(nextRowRaw[i] ?? ''))
+      if (field && !(field in colMap)) colMap[field] = i
+    }
   }
 
   // ── 5. Content-based correction for LW1-style files ──────────────────────
