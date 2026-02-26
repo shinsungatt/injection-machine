@@ -14,12 +14,7 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname()
-  const { user, role, loading, signOut } = useAuth()
-
-  const displayName =
-    user?.user_metadata?.display_name ??
-    user?.email?.split('@')[0] ??
-    '사용자'
+  const { role, displayName, signOut } = useAuth()
 
   return (
     <nav className="border-b bg-white shadow-sm">
@@ -69,12 +64,12 @@ export function Navbar() {
               사용설명서
             </a>
 
-            {/* 사용자 정보 + 로그아웃 */}
-            {!loading && user && (
+            {/* role이 있으면 로그인 상태 → 사용자 정보 + 로그아웃 표시 */}
+            {role !== null && (
               <div className="flex items-center gap-2 ml-3 pl-3 border-l border-gray-200">
                 <div className="flex items-center gap-1.5 text-sm text-gray-600">
                   <User className="h-4 w-4 text-gray-400" />
-                  <span className="font-medium">{displayName}</span>
+                  <span className="font-medium">{displayName ?? '사용자'}</span>
                 </div>
                 <button
                   onClick={signOut}

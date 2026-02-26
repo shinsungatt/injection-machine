@@ -17,21 +17,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // role만 전달 (User 객체 직렬화 시 hydration 오류 방지)
   let initialRole: 'admin' | 'user' | null = null
+  let initialDisplayName: string | null = null
+
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, display_name')
       .eq('id', user.id)
       .single()
     initialRole = (profile?.role as 'admin' | 'user') ?? 'user'
+    initialDisplayName = profile?.display_name ?? user.email?.split('@')[0] ?? '사용자'
   }
 
   return (
     <html lang="ko">
       <body className={`${geist.className} antialiased bg-gray-50 min-h-screen`}>
-        <AuthProvider initialRole={initialRole}>
+        <AuthProvider initialRole={initialRole} initialDisplayName={initialDisplayName}>
           <Navbar />
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {children}
