@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_, session) => {
+      async (event, session) => {
         const currentUser = session?.user ?? null
         setUser(currentUser)
         if (currentUser) {
@@ -55,7 +55,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setRole(null)
         }
-        router.refresh()
+        // INITIAL_SESSION은 페이지 로드 시 기존 세션 복원 이벤트.
+        // router.refresh()를 호출하면 React 트리가 재조정되며 role 상태가 초기화될 수 있음.
+        if (event !== 'INITIAL_SESSION') {
+          router.refresh()
+        }
       }
     )
 

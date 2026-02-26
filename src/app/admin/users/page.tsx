@@ -25,7 +25,8 @@ export default function AdminUsersPage() {
     if (res.ok) {
       setProfiles(await res.json())
     } else {
-      toast.error('사용자 목록을 불러오지 못했습니다.')
+      const body = await res.json().catch(() => ({}))
+      toast.error(body.error ?? '사용자 목록을 불러오지 못했습니다.')
     }
     setLoading(false)
   }
