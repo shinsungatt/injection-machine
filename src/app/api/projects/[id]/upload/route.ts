@@ -23,26 +23,35 @@ const ALIASES: Record<string, string[]> = {
     'part_name', 'part name', '품목명', '품명', '파트명', 'sub품명',
     'item name', 'name', '제품명', '부품명', 'title',
     '명칭', '품목', '아이템', '아이템명', '제품 명칭', '부품 명칭', '파트 명칭',
-    // '품목' excluded from earlier: re-added as it's common in many BOM formats
+    '부 품 명',  // WOORY XV1: 공백 포함 표기
   ],
   material: [
     'material', '원소재', '원재료', '재질', '소재명', '소재', '재료',
     '소재정보 소재명', '원자재', 'mat',
     '생산정보 재질',  // 현대 RFQ: "생산정보" 아래 "재질" 서브헤더 병합
+    '재 질', '원 재 료',  // WOORY XV1: 공백 포함 표기
   ],
   part_weight_g: [
     'part_weight_g', 'weight g', 'weight unit', '중량', '설계중량',
     '단중', 'weight', '무게', '중량 g', '단중 g', '부품중량',
     'net 중량', 'net중량', '순중량',
+    '예상 중량 g',        // WOORY XV1: "예상\n중량(g)" 병합 후 norm
+    '1차 net 중량 g 예상', // WOORY XV1: "사출정보" 하위 1차 NET 중량
+    'net 중량 g 예상',    // 일부 포맷 변형
   ],
   runner_weight_g: [
     'runner_weight_g', 'r/sprue g', 'runner', '런너', 'sprue', 'runner weight',
     '스프루 런너 중량', '스프루런너중량', '런너 중량', '런너중량', '스프루중량',
-    '사출정보 s/r 중량',  // 현대 RFQ: 병합 헤더 "사출정보 S/R 중량(g)예상"
+    '사출정보 s/r 중량',   // 현대 RFQ: 병합 헤더 "사출정보 S/R 중량(g)예상"
+    's/r 중량 g 예상',    // WOORY XV1: "S/R 중량(g)예상"
+    '1차 s/r 중량 g 예상', // WOORY XV1: "사출정보" 하위 1차 S/R 중량
   ],
   cavity_count: [
-    'cavity_count', 'cavity', 'q ty', 'qty', '캐비티', '수량',
+    'cavity_count', 'cavity', 'cav', 'q ty', 'qty', '캐비티', '수량',
     '소요량', 'quantity', '캐비티수', '캐비티 수',
+    '형사양',                  // WOORY XV1: "1*2" = 금형수×캐비티수
+    '사출정보 예상 cavity',    // WOORY XV1: "사출정보" 하위 "예상\nCavity" 병합
+    '예상 cavity',             // WOORY XV1: 서브헤더 직접 참조
   ],
   projected_area_cm2: [
     'projected_area_cm2', '투영면적', 'projected area',
@@ -83,6 +92,8 @@ const ALIASES: Record<string, string[]> = {
     'product_size', '제품사이즈', '제품 사이즈', '사이즈', '제품크기', '제품 크기',
     '외형사이즈', '외형 사이즈', '외형', '제품치수', '제품 치수', 'product size',
     '크기 mm', '크기(mm)',
+    '크기 wxhxd',  // WOORY XV1: "크기\nWxHxD" norm 결과
+    '크기',        // 단순 "크기" 헤더 (길이 2자 이상이므로 매핑 허용)
   ],
   cycle_time_sec: [
     'cycle_time_sec', 'c/t', 'c/t sec', 'ct', 'ct sec', 'cycle time',
@@ -92,6 +103,26 @@ const ALIASES: Record<string, string[]> = {
   is_injection: ['구분 사출'],         // LW1: "●" means injection part
   part_type:    ['type', 'part type'], // BD Atlas: "IJ"=injection, "ASM/MTS/OTS"=skip
   mold_type:    ['구분'],              // Pioneer: "MOLD"=injection, "ASSY"=skip
+}
+
+// 비사출 재료 패턴 — SUS, 알루미늄, 실리콘, 고무 등
+const NON_INJECTION_MATERIAL = /^(sus|s45c|s50c|al|알루미늄|aluminum|aluminium|실리콘|silicon|silicone|고무|rubber|epdm|금속|metal|steel|iron|brass|동|구리|copper|zinc|아연|스프링|spring|-+)$/i
+
+function isNonInjectionMaterial(mat: string): boolean {
+  const m = mat.trim().toLowerCase()
+  if (!m || m === '-' || m === '—' || m === '–') return true
+  // 앞 단어만 추출 (예: "SUS304" → "sus304")
+  const first = m.split(/[\s/+,;(（]/)[0]
+  return NON_INJECTION_MATERIAL.test(first)
+}
+
+// 형사양 캐비티 파싱: "1*2" → 1×2=2, "2*4" → 8, 단순 숫자 → 그대로
+function parseCavity(raw: unknown): number {
+  const s = String(raw ?? '').trim()
+  const parts = s.split(/[×xX*＊✕]/).map(n => parseFloat(n.trim())).filter(n => !isNaN(n) && n > 0)
+  if (parts.length >= 2) return Math.round(parts.reduce((a, b) => a * b, 1))
+  if (parts.length === 1) return Math.round(parts[0])
+  return 1
 }
 
 function mapColumn(header: string): string | null {
@@ -285,12 +316,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     seenNumbers.add(pn)
 
     // ── Other fields ──────────────────────────────────────────────────────
-    const matRaw      = String(get('material')        ?? '').trim()
+    const matRaw      = String(get('material') ?? '').trim()
+
+    // 비사출 재료(SUS, 알루미늄, 실리콘 등) → 스킵
+    if (isNonInjectionMaterial(matRaw)) { filteredInjection++; continue }
+
     const partWeight  = Number(get('part_weight_g')   ?? 0) || 0
     const runnerRaw   = Number(get('runner_weight_g') ?? 0)
     const runnerWeight = runnerRaw > 0 ? runnerRaw : partWeight * 0.15
-    const cavityRaw   = Number(get('cavity_count')    ?? 1)
-    const cavityCount = cavityRaw > 0 && Number.isFinite(cavityRaw) ? Math.round(cavityRaw) : 1
+    // 형사양 "1*2" = 금형수×캐비티수 형식 지원
+    const cavityCount = parseCavity(get('cavity_count') ?? 1)
 
     // ── 제품 사이즈 파싱 ────────────────────────────────────────────────────
     // 1) 통합 컬럼 "100×200×50" 형태 우선 파싱
