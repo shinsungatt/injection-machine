@@ -49,8 +49,10 @@ const ALIASES: Record<string, string[]> = {
   cavity_count: [
     'cavity_count', 'cavity', 'cav', 'q ty', 'qty', '캐비티', '수량',
     '소요량', 'quantity', '캐비티수', '캐비티 수',
-    '형사양',                    // WOORY XV1: "1*2" = 금형수×캐비티수
-    'pilot 금형비 형사양',       // WOORY XV1: "PILOT 금형비" 병합 아래 "형사양"
+    '형사양',                    // WOORY XV1: "1*2" = 금형수×캐비티수 (단독 헤더)
+    'pilot 금형비 형사양',       // WOORY XV1: "PILOT 금형비" 병합+공백 → "형사양"
+    'pilot금형비 형사양',        // WOORY XV1: "PILOT금형비" 병합+공백없음 → "형사양"
+    '금형비 형사양',             // WOORY 변형: "PILOT" 없이 "금형비" 만 있는 경우
     '사출정보 예상 cavity',      // WOORY XV1: "사출정보" 하위 "예상\nCavity" 병합
     '예상 cavity',               // WOORY XV1: 서브헤더 직접 참조
   ],
@@ -93,7 +95,9 @@ const ALIASES: Record<string, string[]> = {
     'product_size', '제품사이즈', '제품 사이즈', '사이즈', '제품크기', '제품 크기',
     '외형사이즈', '외형 사이즈', '외형', '제품치수', '제품 치수', 'product size',
     '크기 mm', '크기(mm)',
-    '크기 wxhxd',  // WOORY XV1: "크기\nWxHxD" norm 결과
+    '크기 wxhxd',  // WOORY XV1: "크기\nWxHxD" (줄바꿈 포함) norm 결과
+    '크기wxhxd',   // WOORY XV1: "크기WxHxD" (줄바꿈 없는 변형) norm 결과
+    '크기 w×h×d', '크기 w h d',  // 구분자 변형
     '크기',        // 단순 "크기" 헤더 (길이 2자 이상이므로 매핑 허용)
   ],
   cycle_time_sec: [
@@ -117,11 +121,12 @@ function isNonInjectionMaterial(mat: string): boolean {
   return NON_INJECTION_MATERIAL.test(first)
 }
 
-// 형사양 캐비티 파싱: "1*2" → 1×2=2, "2*4" → 8, 단순 숫자 → 그대로
+// 형사양 캐비티 파싱: "금형수*캐비티수" 형식
+// "1*2" → 캐비티수=2, "1*8" → 8, "2*4" → 4(금형당), 단순 숫자 → 그대로
 function parseCavity(raw: unknown): number {
   const s = String(raw ?? '').trim()
   const parts = s.split(/[×xX*＊✕]/).map(n => parseFloat(n.trim())).filter(n => !isNaN(n) && n > 0)
-  if (parts.length >= 2) return Math.round(parts.reduce((a, b) => a * b, 1))
+  if (parts.length >= 2) return Math.round(parts[parts.length - 1])  // 마지막 = 캐비티수/금형
   if (parts.length === 1) return Math.round(parts[0])
   return 1
 }
