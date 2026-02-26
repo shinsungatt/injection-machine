@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/auth/login', '/auth/signup', '/auth/callback']
+const PUBLIC_PATHS = ['/auth/login', '/auth/signup', '/auth/callback', '/auth/pending']
 const ADMIN_PATHS = ['/admin']
 
 export async function proxy(request: NextRequest) {
@@ -44,20 +44,26 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(signupUrl)
   }
 
-  // 인증 사용자 → 로그인/회원가입 페이지 접근 시 홈으로
-  if (user && isPublicPath) {
-    return NextResponse.redirect(new URL('/', request.url))
-  }
-
-  // 관리자 전용 경로 → 관리자 아니면 홈으로
-  if (user && ADMIN_PATHS.some(p => path.startsWith(p))) {
+  // 인증 사용자 → profile 조회 (승인 여부 + 역할 확인)
+  if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, status')
       .eq('id', user.id)
       .single()
 
-    if (profile?.role !== 'admin') {
+    // 미승인 사용자 → 대기 페이지로 (대기 페이지 자체는 허용)
+    if (profile?.status !== 'approved' && path !== '/auth/pending') {
+      return NextResponse.redirect(new URL('/auth/pending', request.url))
+    }
+
+    // 승인된 사용자 → 로그인/회원가입 페이지 접근 시 홈으로
+    if (profile?.status === 'approved' && isPublicPath) {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+
+    // 관리자 전용 경로 → 관리자 아니면 홈으로
+    if (ADMIN_PATHS.some(p => path.startsWith(p)) && profile?.role !== 'admin') {
       return NextResponse.redirect(new URL('/', request.url))
     }
   }
