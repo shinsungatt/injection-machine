@@ -42,11 +42,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // onAuthStateChange 하나만 사용 (getUser + onAuthStateChange 동시 사용 시 race condition 발생)
-    // INITIAL_SESSION 이벤트가 페이지 로드 시 기존 세션을 포함해 항상 발생함
+    // getUser()는 서버 API 호출로 쿠키를 직접 읽음 → 자동 로그인 시에도 신뢰할 수 있는 초기값
+    supabase.auth.getUser().then(async ({ data: { user: initialUser } }) => {
+      if (!mounted) return
+      setUser(initialUser)
+      if (initialUser) await loadProfile(initialUser.id)
+      setLoading(false)
+    })
+
+    // INITIAL_SESSION은 getUser()에서 처리하므로 건너뜀
+    // SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED 등 이후 변경만 처리
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return
+        if (!mounted || event === 'INITIAL_SESSION') return
         const currentUser = session?.user ?? null
         setUser(currentUser)
         if (currentUser) {
@@ -54,7 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setRole(null)
         }
-        if (mounted) setLoading(false)
         if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
           router.refresh()
         }
