@@ -28,12 +28,21 @@ export type Machine = {
   created_at: string
 }
 
+export type Profile = {
+  id: string
+  email: string
+  display_name: string | null
+  role: 'admin' | 'user'
+  created_at: string
+}
+
 export type Project = {
   id: string
   name: string
   model_name: string
   description: string | null
   status: 'draft' | 'analyzing' | 'completed'
+  user_id: string
   created_at: string
   updated_at: string
 }

@@ -28,6 +28,10 @@ export default function SignupPage() {
       toast.error('비밀번호는 최소 8자 이상이어야 합니다.')
       return
     }
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      toast.error('비밀번호는 영문과 숫자를 모두 포함해야 합니다.')
+      return
+    }
 
     setLoading(true)
     const supabase = createClient()
