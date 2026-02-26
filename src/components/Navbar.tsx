@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Factory, FolderOpen, LayoutDashboard, BookOpen, LogOut, User } from 'lucide-react'
+import { Factory, FolderOpen, LayoutDashboard, BookOpen, LogOut, User, Users } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 
 const navItems = [
@@ -14,7 +14,7 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname()
-  const { user, loading, signOut } = useAuth()
+  const { user, role, loading, signOut } = useAuth()
 
   const displayName =
     user?.user_metadata?.display_name ??
@@ -45,6 +45,20 @@ export function Navbar() {
                 {label}
               </Link>
             ))}
+            {role === 'admin' && (
+              <Link
+                href="/admin/users"
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                  pathname.startsWith('/admin')
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                )}
+              >
+                <Users className="h-4 w-4" />
+                사용자 관리
+              </Link>
+            )}
             <a
               href="/manual.html"
               target="_blank"

@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/auth/login', '/auth/signup', '/auth/callback']
+const ADMIN_PATHS = ['/admin']
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -47,6 +48,19 @@ export async function proxy(request: NextRequest) {
   // 인증 사용자 → 로그인/회원가입 페이지 접근 시 홈으로
   if (user && isPublicPath) {
     return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // 관리자 전용 경로 → 관리자 아니면 홈으로
+  if (user && ADMIN_PATHS.some(p => path.startsWith(p))) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
   }
 
   return response
