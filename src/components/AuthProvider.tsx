@@ -21,10 +21,17 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 })
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [role, setRole] = useState<UserRole | null>(null)
-  const [loading, setLoading] = useState(true)
+type AuthProviderProps = {
+  children: React.ReactNode
+  initialUser: User | null
+  initialRole: UserRole | null
+}
+
+export function AuthProvider({ children, initialUser, initialRole }: AuthProviderProps) {
+  // 서버에서 읽어온 초기값으로 시작 → 클라이언트 쿠키 파싱 불필요
+  const [user, setUser] = useState<User | null>(initialUser)
+  const [role, setRole] = useState<UserRole | null>(initialRole)
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -37,21 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select('role')
         .eq('id', userId)
         .single()
-      if (mounted) {
-        setRole((data?.role as UserRole) ?? 'user')
-      }
+      if (mounted) setRole((data?.role as UserRole) ?? 'user')
     }
 
-    // getUser()는 서버 API 호출로 쿠키를 직접 읽음 → 자동 로그인 시에도 신뢰할 수 있는 초기값
-    supabase.auth.getUser().then(async ({ data: { user: initialUser } }) => {
-      if (!mounted) return
-      setUser(initialUser)
-      if (initialUser) await loadProfile(initialUser.id)
-      setLoading(false)
-    })
-
-    // INITIAL_SESSION은 getUser()에서 처리하므로 건너뜀
-    // SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED 등 이후 변경만 처리
+    // 로그인 / 로그아웃 등 이후 변경만 처리 (초기값은 서버에서 이미 전달됨)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted || event === 'INITIAL_SESSION') return
