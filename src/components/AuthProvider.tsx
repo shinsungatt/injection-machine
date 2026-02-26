@@ -47,7 +47,7 @@ export function AuthProvider({ children, initialUser, initialRole }: AuthProvide
       if (mounted) setRole((data?.role as UserRole) ?? 'user')
     }
 
-    // 로그인 / 로그아웃 등 이후 변경만 처리 (초기값은 서버에서 이미 전달됨)
+    // 로그인 이후 변경만 처리 (초기값은 서버에서 이미 전달됨)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted || event === 'INITIAL_SESSION') return
@@ -55,11 +55,9 @@ export function AuthProvider({ children, initialUser, initialRole }: AuthProvide
         setUser(currentUser)
         if (currentUser) {
           await loadProfile(currentUser.id)
+          router.refresh()
         } else {
           setRole(null)
-        }
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-          router.refresh()
         }
       }
     )
@@ -73,7 +71,8 @@ export function AuthProvider({ children, initialUser, initialRole }: AuthProvide
   const signOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/auth/login')
+    // router.push 대신 full reload → 서버 쿠키 완전 초기화 보장
+    window.location.href = '/auth/login'
   }
 
   return (
