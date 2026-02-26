@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
-import { createAdminClient } from '@/lib/supabase-admin'
 
-// 현재 사용자가 관리자인지 확인
+// 현재 사용자가 관리자인지 확인 + supabase 클라이언트 반환
 async function requireAdmin() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -15,18 +14,17 @@ async function requireAdmin() {
     .single()
 
   if (profile?.role !== 'admin' || profile?.status !== 'approved') return null
-  return user
+  return { user, supabase }
 }
 
 // GET /api/admin/users — 전체 사용자 목록
 export async function GET() {
-  const admin = await requireAdmin()
-  if (!admin) {
+  const result = await requireAdmin()
+  if (!result) {
     return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 })
   }
 
-  const supabaseAdmin = createAdminClient()
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await result.supabase
     .from('profiles')
     .select('id, email, display_name, role, status, created_at')
     .order('created_at', { ascending: false })
@@ -40,11 +38,12 @@ export async function GET() {
 
 // PATCH /api/admin/users — 사용자 승인 또는 역할 변경
 export async function PATCH(request: Request) {
-  const admin = await requireAdmin()
-  if (!admin) {
+  const result = await requireAdmin()
+  if (!result) {
     return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 })
   }
 
+  const { user, supabase } = result
   const body = await request.json()
   const { id, role, status } = body
 
@@ -52,8 +51,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })
   }
 
-  // 자기 자신 역할 변경 방지
-  if (id === admin.id && role !== undefined) {
+  if (id === user.id && role !== undefined) {
     return NextResponse.json({ error: '자신의 역할은 변경할 수 없습니다.' }, { status: 400 })
   }
 
@@ -65,8 +63,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: '변경할 항목이 없습니다.' }, { status: 400 })
   }
 
-  const supabaseAdmin = createAdminClient()
-  const { error } = await supabaseAdmin
+  const { error } = await supabase
     .from('profiles')
     .update(updates)
     .eq('id', id)
