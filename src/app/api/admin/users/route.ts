@@ -75,5 +75,11 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // 승인 시 Supabase Auth 이메일 인증도 함께 처리
+  // (회사 내부 시스템 — 관리자 승인이 이메일 인증을 대체)
+  if (updates.status === 'approved') {
+    await adminClient.auth.admin.updateUserById(id, { email_confirm: true })
+  }
+
   return NextResponse.json({ success: true })
 }
