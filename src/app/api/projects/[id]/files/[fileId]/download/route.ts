@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-server'
 
 const CONTENT_TYPES: Record<string, string> = {
   pdf:   'application/pdf',
@@ -13,6 +13,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ) {
   const { id, fileId } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: file, error } = await supabase
     .from('project_files')

@@ -3,6 +3,7 @@ import { Geist } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
 import { Toaster } from '@/components/ui/sonner'
+import { AuthProvider } from '@/components/AuthProvider'
 
 const geist = Geist({ subsets: ['latin'] })
 
@@ -15,11 +16,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body className={`${geist.className} antialiased bg-gray-50 min-h-screen`}>
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {children}
-        </main>
-        <Toaster richColors position="top-right" />
+        <AuthProvider>
+          <Navbar />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {children}
+          </main>
+          <Toaster richColors position="top-right" />
+        </AuthProvider>
       </body>
     </html>
   )

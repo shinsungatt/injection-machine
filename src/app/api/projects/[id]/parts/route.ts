@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-server'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { data, error } = await supabase
     .from('parts')
     .select('*')
@@ -15,6 +19,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // 일괄 삭제: DELETE body { ids: string[] }
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const body = await req.json().catch(() => ({}))
   const ids: string[] = Array.isArray(body.ids) ? body.ids : []
   if (ids.length === 0) return NextResponse.json({ error: '삭제할 파트 ID가 없습니다.' }, { status: 400 })
@@ -23,13 +31,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .from('parts')
     .delete()
     .in('id', ids)
-    .eq('project_id', id)  // 보안: 해당 프로젝트 파트만 삭제
+    .eq('project_id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true, deleted: ids.length })
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const body = await req.json()
 
   // runner_weight_g 기본값: 파트중량 × 0.15

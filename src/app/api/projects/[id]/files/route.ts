@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-server'
 import * as XLSX from 'xlsx'
 import { parseProductSize, calcMoldSizeFromProduct, productDimsToProjectedArea } from '@/lib/algorithm'
 import { hasSlideCore } from '@/lib/algorithm'
@@ -18,30 +18,34 @@ const ALIASES: Record<string, string[]> = {
     'part_number', 'part number', 'no', 'no.', 'num', '번호',
     '품번', '도번', 'item no', 'item_no', '부품번호',
     '연번', '순번', '일련번호', '품목번호',
+    'dk입고품번', '입고품번', '관리번호', '제품번호', 'model no',
   ],
   part_name: [
     'part_name', 'part name', '품목명', '품명', '파트명', 'sub품명',
     'item name', 'name', '제품명', '부품명', 'title',
     '명칭', '품목', '아이템', '아이템명', '제품 명칭', '부품 명칭', '파트 명칭',
+    '품명칭', '부품명칭', '품목명칭', 'parts name',
   ],
   material: [
     'material', '원소재', '원재료', '재질', '소재명', '소재', '재료',
     '소재정보 소재명', '원자재', 'mat',
-    '생산정보 재질',  // 현대 RFQ: "생산정보" 아래 "재질" 서브헤더
+    '생산정보 재질',
   ],
   part_weight_g: [
     'part_weight_g', 'weight g', 'weight unit', '중량', '설계중량',
     '단중', 'weight', '무게', '중량 g', '단중 g', '부품중량',
     'net 중량', 'net중량', '순중량',
+    'expected weight g',  // 42dot RFQ: "Expected\r\nWeight (g)"
   ],
   runner_weight_g: [
     'runner_weight_g', 'r/sprue g', 'runner', '런너', 'sprue', 'runner weight',
     '스프루 런너 중량', '스프루런너중량', '런너 중량', '런너중량', '스프루중량',
-    '사출정보 s/r 중량',  // 현대 RFQ: 병합 헤더 "사출정보 S/R 중량(g)예상" (prefix 매칭)
+    '사출정보 s/r 중량',
   ],
   cavity_count: [
-    'cavity_count', 'cavity', 'q ty', 'qty', '캐비티', '수량',
+    'cavity_count', 'cavity', 'q ty', "q'ty", 'qty', '캐비티', '수량',
     '소요량', 'quantity', '캐비티수', '캐비티 수',
+    'quantity per set',  // 42dot: "Quantity per Set"
   ],
   projected_area_cm2: [
     'projected_area_cm2', '투영면적', 'projected area',
@@ -59,12 +63,19 @@ const ALIASES: Record<string, string[]> = {
     'mold_depth_mm', '금형사이즈 높이', '금형사이즈높이',
     '금형 사이즈 mm 높이 두께', '높이 두께', '금형두께', 'mold depth',
   ],
-  // 제품 사이즈 개별 컬럼 — product_size 보다 먼저 선언
+  // ── 제품 벽두께 (C/T 냉각시간 계산용) ─────────────────────────────────────
+  // 주의: 제품 높이(height/depth)와 벽두께(thickness)는 다름
+  // 높이(예: 142mm)를 두께로 잘못 인식하면 C/T가 300초(최대)로 계산됨
+  wall_thickness_mm: [
+    'wall_thickness_mm', '기본두께', '두께', '평균두께', '최대두께', '최소두께',
+    'thickness', 'wall thickness', '벽두께', '살두께', '기준두께',
+  ],
+  // ── 제품 사이즈 개별 컬럼 ─────────────────────────────────────────────────
   product_width_mm: [
     'product_width_mm', 'part_width_mm',
     '제품사이즈 가로', '제품사이즈가로', '제품 가로', '제품가로',
     '가로', '가로(mm)', '가로 mm', 'product width', 'part width',
-    'size mm 가로',  // 현대 RFQ: "SIZE (mm)" 아래 "가로" 서브헤더
+    'size mm 가로',
   ],
   product_height_mm: [
     'product_height_mm', 'part_height_mm',
@@ -75,6 +86,7 @@ const ALIASES: Record<string, string[]> = {
     'product_depth_mm', 'part_depth_mm',
     '제품사이즈 높이', '제품사이즈높이', '제품 높이', '제품높이',
     '높이', '높이(mm)', '높이 mm', 'product depth', 'part depth',
+    // 주의: 이 컬럼은 투영면적/금형크기 추정에만 사용, C/T 두께에는 사용 안 함
   ],
   product_size: [
     'product_size', '제품사이즈', '제품 사이즈', '사이즈', '제품크기', '제품 크기',
@@ -96,6 +108,10 @@ const ALIASES: Record<string, string[]> = {
     '표면사양', 'surface', '마감', '마감처리', 'finishing',
   ],
 }
+
+// part_name은 마지막 매칭 컬럼 우선 (last-wins):
+// 동일 헤더명이 여러 개일 때(예: "SUB품명" × 2) 마지막 컬럼이 실제 품명인 경우 대응
+const LAST_WINS_FIELDS = new Set(['part_name'])
 
 function mapColumn(header: string): string | null {
   const n = norm(header)
@@ -293,6 +309,10 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const type = req.nextUrl.searchParams.get('type')
   // file_data(base64)는 목록 조회에서 제외 (성능)
   let query = supabase
@@ -316,6 +336,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const formData = await req.formData()

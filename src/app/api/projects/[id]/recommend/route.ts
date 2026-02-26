@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-server'
 import { calculateRecommendations } from '@/lib/algorithm'
 import type { Part, Machine } from '@/lib/supabase'
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // 파트 목록 조회
   const { data: parts, error: partsError } = await supabase
@@ -76,6 +79,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: parts, error: partsError } = await supabase
     .from('parts')

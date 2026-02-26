@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-server'
 
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; fileId: string }> }
 ) {
   const { id, fileId } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: file, error: fetchError } = await supabase
     .from('project_files')

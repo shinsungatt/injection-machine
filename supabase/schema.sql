@@ -81,6 +81,89 @@ CREATE TRIGGER projects_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
+-- 인증 관련 스키마 (user-auth v1.1.0)
+-- ============================================================
+
+-- 5. 프로필(Profiles) 테이블
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  email TEXT NOT NULL,
+  display_name TEXT,
+  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 신규 사용자 프로필 자동 생성 트리거
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO profiles (id, email, display_name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1))
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+-- 6. projects 테이블에 user_id 추가
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+
+-- ============================================================
+-- RLS (Row Level Security) 정책
+-- ============================================================
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE parts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recommendations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE machines ENABLE ROW LEVEL SECURITY;
+
+-- profiles: 본인만 조회/수정
+DROP POLICY IF EXISTS "profiles_self" ON profiles;
+CREATE POLICY "profiles_self" ON profiles
+  FOR ALL USING (auth.uid() = id);
+
+-- machines: 인증 사용자 전체 읽기, admin만 수정
+DROP POLICY IF EXISTS "machines_read" ON machines;
+CREATE POLICY "machines_read" ON machines
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "machines_write" ON machines;
+CREATE POLICY "machines_write" ON machines
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+  );
+
+-- projects: 본인 소유 데이터만
+DROP POLICY IF EXISTS "projects_owner" ON projects;
+CREATE POLICY "projects_owner" ON projects
+  FOR ALL USING (auth.uid() = user_id);
+
+-- parts: 프로젝트 소유자만
+DROP POLICY IF EXISTS "parts_owner" ON parts;
+CREATE POLICY "parts_owner" ON parts
+  FOR ALL USING (
+    EXISTS (SELECT 1 FROM projects WHERE id = parts.project_id AND user_id = auth.uid())
+  );
+
+-- recommendations: 파트 소유자만
+DROP POLICY IF EXISTS "recommendations_owner" ON recommendations;
+CREATE POLICY "recommendations_owner" ON recommendations
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM parts p
+      JOIN projects pr ON p.project_id = pr.id
+      WHERE p.id = recommendations.part_id AND pr.user_id = auth.uid()
+    )
+  );
+
+-- ============================================================
 -- 샘플 설비 데이터 (7대)
 -- ============================================================
 INSERT INTO machines (name, manufacturer, clamping_force_ton, shot_weight_max_g, injection_pressure_max_mpa, platen_width_mm, platen_height_mm, tie_bar_x_mm, tie_bar_y_mm, daylight_max_mm, screw_diameter_mm, notes) VALUES

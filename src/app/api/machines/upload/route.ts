@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase-server'
 import * as XLSX from 'xlsx'
 
 // "715*715" 또는 "470X420" → [715, 715]
@@ -26,6 +26,10 @@ function parseManufacturer(name: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const formData = await req.formData()
   const file = formData.get('file') as File
   if (!file) return NextResponse.json({ error: '파일이 없습니다.' }, { status: 400 })
@@ -120,7 +124,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '유효한 설비 데이터가 없습니다.' }, { status: 400 })
   }
 
-  const { data, error } = await supabase.from('machines').insert(machines).select()
+  const { data, error } = await supabase.from('machines').insert(machines as object[]).select()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ success: true, count: data?.length ?? 0 })

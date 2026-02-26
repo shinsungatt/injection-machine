@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Factory, FolderOpen, LayoutDashboard, BookOpen } from 'lucide-react'
+import { Factory, FolderOpen, LayoutDashboard, BookOpen, LogOut, User } from 'lucide-react'
+import { useAuth } from '@/components/AuthProvider'
 
 const navItems = [
   { href: '/', label: '대시보드', icon: LayoutDashboard },
@@ -13,6 +14,12 @@ const navItems = [
 
 export function Navbar() {
   const pathname = usePathname()
+  const { user, loading, signOut } = useAuth()
+
+  const displayName =
+    user?.user_metadata?.display_name ??
+    user?.email?.split('@')[0] ??
+    '사용자'
 
   return (
     <nav className="border-b bg-white shadow-sm">
@@ -47,6 +54,24 @@ export function Navbar() {
               <BookOpen className="h-4 w-4" />
               사용설명서
             </a>
+
+            {/* 사용자 정보 + 로그아웃 */}
+            {!loading && user && (
+              <div className="flex items-center gap-2 ml-3 pl-3 border-l border-gray-200">
+                <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                  <User className="h-4 w-4 text-gray-400" />
+                  <span className="font-medium">{displayName}</span>
+                </div>
+                <button
+                  onClick={signOut}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                  title="로그아웃"
+                >
+                  <LogOut className="h-4 w-4" />
+                  로그아웃
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
