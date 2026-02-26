@@ -38,10 +38,10 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/favicon') ||
     path === '/manual.html'
 
-  // 비인증 사용자 → 보호된 경로 접근 시 회원가입으로
+  // 비인증 사용자 → 보호된 경로 접근 시 로그인으로
   if (!user && !isPublicPath && !isPublicAsset) {
-    const signupUrl = new URL('/auth/signup', request.url)
-    return NextResponse.redirect(signupUrl)
+    const loginUrl = new URL('/auth/login', request.url)
+    return NextResponse.redirect(loginUrl)
   }
 
   // 인증 사용자 → profile 조회 (승인 여부 + 역할 확인)
