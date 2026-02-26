@@ -195,19 +195,35 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">{new Date(profile.created_at).toLocaleDateString('ko-KR')}</td>
                     <td className="px-6 py-4">
-                      {profile.role !== 'admin' && (
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={() => revokeUser(profile)}
+                          onClick={() => toggleRole(profile)}
                           disabled={updating === profile.id}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50 ${
+                            profile.role === 'admin'
+                              ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                          }`}
                         >
                           {updating === profile.id
                             ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            : <XCircle className="h-3.5 w-3.5" />
+                            : profile.role === 'admin'
+                              ? <ShieldOff className="h-3.5 w-3.5" />
+                              : <Shield className="h-3.5 w-3.5" />
                           }
-                          차단
+                          {profile.role === 'admin' ? '관리자 해제' : '관리자 승격'}
                         </button>
-                      )}
+                        {profile.role !== 'admin' && (
+                          <button
+                            onClick={() => revokeUser(profile)}
+                            disabled={updating === profile.id}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            차단
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
