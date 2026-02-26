@@ -49,9 +49,10 @@ const ALIASES: Record<string, string[]> = {
   cavity_count: [
     'cavity_count', 'cavity', 'cav', 'q ty', 'qty', '캐비티', '수량',
     '소요량', 'quantity', '캐비티수', '캐비티 수',
-    '형사양',                  // WOORY XV1: "1*2" = 금형수×캐비티수
-    '사출정보 예상 cavity',    // WOORY XV1: "사출정보" 하위 "예상\nCavity" 병합
-    '예상 cavity',             // WOORY XV1: 서브헤더 직접 참조
+    '형사양',                    // WOORY XV1: "1*2" = 금형수×캐비티수
+    'pilot 금형비 형사양',       // WOORY XV1: "PILOT 금형비" 병합 아래 "형사양"
+    '사출정보 예상 cavity',      // WOORY XV1: "사출정보" 하위 "예상\nCavity" 병합
+    '예상 cavity',               // WOORY XV1: 서브헤더 직접 참조
   ],
   projected_area_cm2: [
     'projected_area_cm2', '투영면적', 'projected area',
@@ -141,7 +142,7 @@ function mapColumn(header: string): string | null {
 }
 
 function scoreRow(row: unknown[]): number {
-  return row.filter(c => mapColumn(String(c ?? '')) !== null).length
+  return getFieldsOfRow(row).size
 }
 
 function getFieldsOfRow(row: unknown[]): Set<string> {
