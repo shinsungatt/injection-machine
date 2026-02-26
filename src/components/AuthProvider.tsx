@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase-browser'
-import { useRouter } from 'next/navigation'
 
 type UserRole = 'admin' | 'user'
 
@@ -23,16 +22,13 @@ const AuthContext = createContext<AuthContextType>({
 
 type AuthProviderProps = {
   children: React.ReactNode
-  initialUser: User | null
   initialRole: UserRole | null
 }
 
-export function AuthProvider({ children, initialUser, initialRole }: AuthProviderProps) {
-  // 서버에서 읽어온 초기값으로 시작 → 클라이언트 쿠키 파싱 불필요
-  const [user, setUser] = useState<User | null>(initialUser)
-  const [role, setRole] = useState<UserRole | null>(initialRole)
-  const [loading, setLoading] = useState(false)
-  const router = useRouter()
+export function AuthProvider({ children, initialRole }: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(null)
+  const [role, setRole] = useState<UserRole | null>(initialRole) // 서버에서 전달된 role로 즉시 시작
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const supabase = createClient()
@@ -47,7 +43,14 @@ export function AuthProvider({ children, initialUser, initialRole }: AuthProvide
       if (mounted) setRole((data?.role as UserRole) ?? 'user')
     }
 
-    // 로그인 이후 변경만 처리 (초기값은 서버에서 이미 전달됨)
+    // 현재 로그인 유저 정보 로드 (user 객체용)
+    supabase.auth.getUser().then(async ({ data: { user: currentUser } }) => {
+      if (!mounted) return
+      setUser(currentUser)
+      setLoading(false)
+    })
+
+    // 로그인/로그아웃 이벤트 처리
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted || event === 'INITIAL_SESSION') return
@@ -55,7 +58,6 @@ export function AuthProvider({ children, initialUser, initialRole }: AuthProvide
         setUser(currentUser)
         if (currentUser) {
           await loadProfile(currentUser.id)
-          router.refresh()
         } else {
           setRole(null)
         }
@@ -66,12 +68,11 @@ export function AuthProvider({ children, initialUser, initialRole }: AuthProvide
       mounted = false
       subscription.unsubscribe()
     }
-  }, [router])
+  }, [])
 
   const signOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
-    // router.push 대신 full reload → 서버 쿠키 완전 초기화 보장
     window.location.href = '/auth/login'
   }
 

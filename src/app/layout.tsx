@@ -14,11 +14,10 @@ export const metadata: Metadata = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // 서버에서 쿠키를 직접 읽어 초기 인증 상태를 클라이언트에 전달
-  // 이렇게 하면 클라이언트가 쿠키를 직접 파싱할 필요 없이 항상 정확한 초기값을 가짐
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // role만 전달 (User 객체 직렬화 시 hydration 오류 방지)
   let initialRole: 'admin' | 'user' | null = null
   if (user) {
     const { data: profile } = await supabase
@@ -32,7 +31,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="ko">
       <body className={`${geist.className} antialiased bg-gray-50 min-h-screen`}>
-        <AuthProvider initialUser={user} initialRole={initialRole}>
+        <AuthProvider initialRole={initialRole}>
           <Navbar />
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {children}
