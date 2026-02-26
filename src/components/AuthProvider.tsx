@@ -27,27 +27,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  const loadProfile = async (userId: string) => {
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single()
-    setRole((data?.role as UserRole) ?? 'user')
-  }
-
   useEffect(() => {
     const supabase = createClient()
+    let mounted = true
 
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      setUser(user)
-      if (user) await loadProfile(user.id)
-      setLoading(false)
-    })
+    const loadProfile = async (userId: string) => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+      if (mounted) {
+        setRole((data?.role as UserRole) ?? 'user')
+      }
+    }
 
+    // onAuthStateChange 하나만 사용 (getUser + onAuthStateChange 동시 사용 시 race condition 발생)
+    // INITIAL_SESSION 이벤트가 페이지 로드 시 기존 세션을 포함해 항상 발생함
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return
         const currentUser = session?.user ?? null
         setUser(currentUser)
         if (currentUser) {
@@ -55,15 +54,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setRole(null)
         }
-        // INITIAL_SESSION은 페이지 로드 시 기존 세션 복원 이벤트.
-        // router.refresh()를 호출하면 React 트리가 재조정되며 role 상태가 초기화될 수 있음.
-        if (event !== 'INITIAL_SESSION') {
+        if (mounted) setLoading(false)
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
           router.refresh()
         }
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [router])
 
   const signOut = async () => {
