@@ -71,9 +71,12 @@ export function AuthProvider({ children, initialRole }: AuthProviderProps) {
   }, [])
 
   const signOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    window.location.href = '/auth/login'
+    // 서버 API 호출 → HttpOnly 쿠키를 서버에서 삭제 후 로그인 페이지로 리다이렉트
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = '/api/auth/signout'
+    document.body.appendChild(form)
+    form.submit()
   }
 
   return (
