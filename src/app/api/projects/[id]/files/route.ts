@@ -35,6 +35,9 @@ const ALIASES: Record<string, string[]> = {
     'part_weight_g', 'weight g', 'weight unit', '중량', '설계중량',
     '단중', 'weight', '무게', '중량 g', '단중 g', '부품중량',
     'net 중량', 'net중량', '순중량',
+    '예상 중량 g',        // "예상\n중량(g)" 병합 후 norm
+    '예상중량 g',         // "예상중량(g)" → norm → "예상중량 g"
+    '예상중량',           // 괄호 없는 변형
     'expected weight g',  // 42dot RFQ: "Expected\r\nWeight (g)"
   ],
   runner_weight_g: [
@@ -275,10 +278,13 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
     // Remark / Finish → notes 필드 구성
     const remarkRaw = colMap.remark !== undefined ? String(row[colMap.remark] ?? '').trim() : ''
     const finishRaw = colMap.finish !== undefined ? String(row[colMap.finish] ?? '').trim() : ''
+    // 실제 벽 두께 컬럼(두께/기본두께 등)이 있으면 thickness_mm 저장
+    // ※ productD(제품 높이/깊이 치수)는 벽 두께가 아니므로 사용하지 않음
+    const wallThickRaw = colMap.wall_thickness_mm !== undefined ? Number(row[colMap.wall_thickness_mm]) || 0 : 0
     const noteParts: string[] = []
-    if (productD > 0)    noteParts.push(`thickness_mm:${productD}`)
-    if (finishRaw)       noteParts.push(`finish:${finishRaw}`)
-    if (remarkRaw)       noteParts.push(remarkRaw)
+    if (wallThickRaw > 0) noteParts.push(`thickness_mm:${wallThickRaw}`)
+    if (finishRaw)        noteParts.push(`finish:${finishRaw}`)
+    if (remarkRaw)        noteParts.push(remarkRaw)
     const notesValue = noteParts.length > 0 ? noteParts.join(' | ') : null
 
     // 슬라이드 구조 여부 (Remark에 'Slide' 포함 시)

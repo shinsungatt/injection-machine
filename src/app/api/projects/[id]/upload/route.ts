@@ -36,6 +36,8 @@ const ALIASES: Record<string, string[]> = {
     '단중', 'weight', '무게', '중량 g', '단중 g', '부품중량',
     'net 중량', 'net중량', '순중량',
     '예상 중량 g',        // WOORY XV1: "예상\n중량(g)" 병합 후 norm
+    '예상중량 g',         // "예상중량(g)" → norm → "예상중량 g"
+    '예상중량',           // 괄호 없는 변형
     '1차 net 중량 g 예상', // WOORY XV1: "사출정보" 하위 1차 NET 중량
     'net 중량 g 예상',    // 일부 포맷 변형
   ],

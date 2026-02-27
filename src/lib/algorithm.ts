@@ -121,6 +121,7 @@ const RESIN_PRESSURE: Record<string, number> = {
   PA66: 400,
   PA: 400,
   PC: 450,
+  PCABS: 450,  // PC+ABS: PC 수준 수지압력
   POM: 350,
   PE: 280,
   PS: 320,
@@ -135,6 +136,7 @@ const MATERIAL_CORRECTION: Record<string, number> = {
   PA66: 1.05 / 1.14, // 0.921
   PA: 1.05 / 1.14,   // 0.921
   PC: 1.05 / 1.20,   // 0.875
+  PCABS: 1.05 / 1.20, // 0.875 (기존 동일 유지)
   POM: 1.05 / 1.42,  // 0.739
   PE: 1.05 / 0.95,   // 1.105
   PS: 1.0,
@@ -142,12 +144,48 @@ const MATERIAL_CORRECTION: Record<string, number> = {
   TPE: 1.05 / 0.90,  // 1.167
 }
 
-// 재질 문자열에서 기준 키 추출: "PA6-GF30%" → "PA66", "PP-GF20" → "PP"
+// 재질별 밀도 (g/cm³) — 유효 두께 역산에 사용
+const MATERIAL_DENSITY: Record<string, number> = {
+  PP:    0.91,
+  ABS:   1.05,
+  PA66:  1.14,
+  PA6:   1.14,
+  PA:    1.14,
+  PC:    1.20,
+  PCABS: 1.15,  // PC+ABS 실측 밀도
+  POM:   1.42,
+  PE:    0.95,
+  PS:    1.05,
+  PET:   1.37,
+  TPE:   0.90,
+  TPU:   1.20,
+}
+
+// 두께 기반 냉각시간 계수 k  (t_cool = t_mm² × k)
+// 열확산계수 α·온도 조건(용융/금형/이형) 기반 보정값
+// PC+ABS: α=0.001cm²/s, Tm=260°C, Tw=65°C, Te=95°C → k≈1.7
+const COOLING_K_FACTOR: Record<string, number> = {
+  PP:    1.2,
+  ABS:   1.4,
+  PA66:  1.3,
+  PA6:   1.3,
+  PA:    1.3,
+  PC:    2.0,
+  PCABS: 1.7,  // Ballman-Shusman 이론식 검증값
+  POM:   1.4,
+  PE:    1.1,
+  PS:    1.0,
+  PET:   1.5,
+  TPE:   1.2,
+  TPU:   1.3,
+}
+
+// 재질 문자열에서 기준 키 추출: "PA6-GF30%" → "PA66", "PC+ABS NS5000CRT" → "PCABS"
 function normalizeMaterialKey(material: string): string {
   const upper = material.toUpperCase().replace(/\s/g, '')
   if (upper.startsWith('PA6') || upper.startsWith('PA ')) return 'PA66'
   if (upper.startsWith('PP')) return 'PP'
-  if (upper.startsWith('PC+ABS') || upper.startsWith('PC/ABS')) return 'PC'
+  if (upper.startsWith('PC+ABS') || upper.startsWith('PC/ABS') || upper.startsWith('PCABS')) return 'PCABS'
   if (upper.startsWith('PC')) return 'PC'
   if (upper.startsWith('ABS')) return 'ABS'
   if (upper.startsWith('POM')) return 'POM'
@@ -336,18 +374,19 @@ type CTParams = {
 }
 
 const CT_PARAMS: Record<string, CTParams> = {
-  PP:   { base: 15, weightFactor: 0.15, areaFactor: 1.5, gfMultiplier: 1.20 },
-  ABS:  { base: 12, weightFactor: 0.12, areaFactor: 1.2, gfMultiplier: 1.15 },
-  PA66: { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.10 },
-  PA6:  { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.10 },
-  PA:   { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.10 },
-  PC:   { base: 20, weightFactor: 0.25, areaFactor: 2.0, gfMultiplier: 1.20 },
-  POM:  { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.15 },
-  PE:   { base: 14, weightFactor: 0.14, areaFactor: 1.4, gfMultiplier: 1.10 },
-  PS:   { base: 10, weightFactor: 0.10, areaFactor: 1.0, gfMultiplier: 1.10 },
-  PET:  { base: 16, weightFactor: 0.18, areaFactor: 1.5, gfMultiplier: 1.15 },
-  TPE:  { base: 12, weightFactor: 0.12, areaFactor: 1.2, gfMultiplier: 1.10 },
-  TPU:  { base: 14, weightFactor: 0.14, areaFactor: 1.3, gfMultiplier: 1.10 },
+  PP:    { base: 15, weightFactor: 0.15, areaFactor: 1.5, gfMultiplier: 1.20 },
+  ABS:   { base: 12, weightFactor: 0.12, areaFactor: 1.2, gfMultiplier: 1.15 },
+  PA66:  { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.10 },
+  PA6:   { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.10 },
+  PA:    { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.10 },
+  PC:    { base: 20, weightFactor: 0.25, areaFactor: 2.0, gfMultiplier: 1.20 },
+  PCABS: { base: 18, weightFactor: 0.22, areaFactor: 1.8, gfMultiplier: 1.15 },
+  POM:   { base: 18, weightFactor: 0.20, areaFactor: 1.5, gfMultiplier: 1.15 },
+  PE:    { base: 14, weightFactor: 0.14, areaFactor: 1.4, gfMultiplier: 1.10 },
+  PS:    { base: 10, weightFactor: 0.10, areaFactor: 1.0, gfMultiplier: 1.10 },
+  PET:   { base: 16, weightFactor: 0.18, areaFactor: 1.5, gfMultiplier: 1.15 },
+  TPE:   { base: 12, weightFactor: 0.12, areaFactor: 1.2, gfMultiplier: 1.10 },
+  TPU:   { base: 14, weightFactor: 0.14, areaFactor: 1.3, gfMultiplier: 1.10 },
 }
 
 function getCTParams(material: string): CTParams {
@@ -355,37 +394,110 @@ function getCTParams(material: string): CTParams {
   return CT_PARAMS[key] ?? { base: 15, weightFactor: 0.15, areaFactor: 1.5, gfMultiplier: 1.15 }
 }
 
+function getMaterialDensity(material: string): number {
+  const key = normalizeMaterialKey(material)
+  return MATERIAL_DENSITY[key] ?? 1.05
+}
+
+function getCoolingKFactor(material: string): number {
+  const key = normalizeMaterialKey(material)
+  return COOLING_K_FACTOR[key] ?? 1.5
+}
+
+/**
+ * 드라이 사이클 타임 추정 (sec)
+ * = 사출 충진 + 보압 + 금형 개폐 + 취출 (냉각 제외)
+ * 기계 크기(형체력)에 따라 선형 스케일
+ */
+function estimateDryCycleTime(clampingTon: number): number {
+  if (clampingTon <= 50)  return 18  // 소형 (~50T): 18초
+  if (clampingTon <= 150) return 22  // 중소형 (~150T): 22초
+  if (clampingTon <= 400) return 27  // 중형 (~400T): 27초
+  if (clampingTon <= 800) return 33  // 대형 (~800T): 33초
+  return 40                          // 초대형 (>800T): 40초
+}
+
+/**
+ * 유효 벽 두께 역산 (mm)
+ * ① 부품 체적 = 중량 ÷ 밀도
+ * ② 평균 두께 = 체적 ÷ 투영면적 (cm → mm 변환)
+ * ③ 리브/보스 보정 × 0.82 → 냉각 기준 유효 두께
+ *
+ * 반환값: 유효 두께 mm, rawThicknessMm은 보정 전 값
+ */
+function estimateEffectiveThickness(part: Part): { effectiveMm: number; rawMm: number } {
+  const density      = getMaterialDensity(part.material)
+  const volumeCm3    = part.part_weight_g / density
+  const rawMm        = (volumeCm3 / part.projected_area_cm2) * 10  // cm → mm
+  const effectiveMm  = rawMm * 0.82  // 리브·보스로 인한 체적 분산 보정
+  return { effectiveMm, rawMm }
+}
+
 /**
  * 예상 사이클타임 예측 (sec)
- * - cycle_time_sec 가 없을 때 사용
- * - 재질, 중량, 투영면적, 캐비티 수 기반으로 추산
- * - 두께 기반 냉각시간: T_c = 2.5 × t² (두께가 두꺼울수록 기하급수적 증가)
- *   두께는 notes의 "thickness_mm:X" 값 또는 mold_depth_mm 활용
+ *
+ * 개선된 3단계 로직:
+ *   1단계: 중량+면적 → 유효 두께(t) 역산
+ *   2단계: 재질별 냉각 계수(k) 적용  →  T_cool = t² × k
+ *   3단계: T_total = T_cool + T_dry (기계 크기별 드라이 사이클)
+ *
+ * 혼합 전략 (블렌드):
+ *   - 두꺼운 부품 (rawMm > 4.0mm): 물리 공식 100% 적용
+ *   - 얇은 부품  (rawMm < 1.5mm): 기존 경험식 100% 적용 (대형 박육 부품 정확도 유지)
+ *   - 중간 범위: 선형 보간
+ *
+ * 검증:
+ *   PC+ABS NS5000CRT 18g / 42.84cm² / 1캐비 → 예측 ~33초 (이론 33.3초)
+ *   PA6-GF30%       60g / 317cm²   / 2캐비 → 예측 ~62초 (실측 65초, 오차 ~4%)
  */
 export function predictCycleTime(part: Part): number {
-  const params = getCTParams(part.material)
-  const hasGF = /GF|CF|GLASS|CARBON/i.test(part.material)
-  const area   = Math.max(part.projected_area_cm2 || 10, 10)
-  const weight = Math.max(part.part_weight_g      || 1,  1)
+  const params  = getCTParams(part.material)
+  const hasGF   = /GF|CF|GLASS|CARBON/i.test(part.material)
+  const area    = Math.max(part.projected_area_cm2 || 10, 10)
+  const weight  = Math.max(part.part_weight_g      || 1,  1)
 
-  let ct = params.base
+  // ── 기존 경험식 (면적+중량 기반) ──────────────────────────────
+  const ct_empirical = params.base
     + params.weightFactor * weight
     + params.areaFactor   * Math.sqrt(area)
-    + (part.cavity_count - 1) * 2   // 멀티캐비티: 캐비티당 +2sec
+    + (part.cavity_count - 1) * 2
 
-  if (hasGF) ct *= params.gfMultiplier
+  // ── 두께 취득: notes 직접 입력 > 중량/면적 역산 ───────────────
+  const hasWeightArea  = part.part_weight_g > 0 && part.projected_area_cm2 > 0
+  const explicitThick  = getThicknessFromNotes(part.notes)
 
-  // 두께 기반 냉각시간 보정: T_c = 2.5 × t² (mm 단위)
-  // notes에서 우선 추출, 없으면 mold_depth_mm 참고
-  const thicknessMm = getThicknessFromNotes(part.notes) ?? null
-  if (thicknessMm !== null && thicknessMm > 0) {
-    const coolingTime = 2.5 * thicknessMm * thicknessMm
-    // 냉각시간이 현재 예측값의 냉각 기여분보다 크면 차이만큼 보정
-    const currentCooling = params.base * 0.6 // base 중 냉각 비중 약 60%
-    if (coolingTime > currentCooling) {
-      ct += coolingTime - currentCooling
-    }
+  let thicknessMm: number | null = explicitThick
+  let rawMm = 0
+
+  if (thicknessMm === null && hasWeightArea) {
+    const est    = estimateEffectiveThickness(part)
+    thicknessMm  = est.effectiveMm
+    rawMm        = est.rawMm
+  } else if (thicknessMm !== null) {
+    rawMm = thicknessMm  // 직접 입력된 경우 raw = 입력값 그대로
   }
 
+  // ── 두께 기반 물리 공식: T_total = (t² × k) + T_dry ──────────
+  let ct_base: number
+
+  if (thicknessMm !== null && thicknessMm > 0) {
+    const k_cool      = getCoolingKFactor(part.material)
+    const t_cool      = thicknessMm * thicknessMm * k_cool
+    const clampingTon = part.projected_area_cm2 > 0 ? calcRequiredClampingForce(part) : 50
+    const t_dry       = estimateDryCycleTime(clampingTon)
+    const cavAdj      = (part.cavity_count - 1) * 1.5
+
+    const ct_physics = t_cool + t_dry + cavAdj
+
+    // 블렌드 비율: rawMm 기준
+    //   rawMm ≥ 4.0mm → blend=1.0 (물리 공식 100%)
+    //   rawMm ≤ 1.5mm → blend=0.0 (경험식 100%)
+    const blend  = Math.min(1.0, Math.max(0.0, (rawMm - 1.5) / 2.5))
+    ct_base = blend * ct_physics + (1 - blend) * ct_empirical
+  } else {
+    ct_base = ct_empirical
+  }
+
+  const ct = hasGF ? ct_base * params.gfMultiplier : ct_base
   return Math.round(Math.max(15, Math.min(300, ct)))
 }
