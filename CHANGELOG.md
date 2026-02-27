@@ -4,6 +4,28 @@
 
 ---
 
+## [1.1.0] - 2026-02-27
+
+### 개요
+- C/T 예측 알고리즘 Safety Guard 보강 — 두께 미입력 시 역산 오류(300초)방지
+- 파트 입력 UI에 최대 벽 두께(Max Wall Thickness) 전용 입력 필드 추가
+- 개발용 임시 파일 제거 (xlsx, scripts)
+
+### Fixed
+- **두께 역산 4mm 클램프 추가** (`estimateEffectiveThickness`): 중량↑/면적↓ 이상 조합 시 역산 두께가 수십mm로 계산되어 C/T가 300초로 폭발하던 버그 수정. 역산값은 최대 4.0mm로 클램프.
+- **직접 입력 Safety Guard 추가** (`predictCycleTime`): 두께 직접 입력값이 5mm 이상이면 제품 높이 오기입으로 판단하여 3.5mm 기본값으로 강제 고정.
+
+### Added
+- **최대 벽 두께 전용 입력 필드** (파트 입력 폼): 제품 외형 높이와 별개로 실제 벽 두께를 직접 입력 가능. 미입력 시 중량/밀도/면적으로 자동 역산(최대 4mm 제한).
+- **두께 해석 결과 export** (`resolveEffectiveThickness`): 두께 출처(직접입력/역산/클램프적용) 반환 함수.
+- **결과 페이지 C/T 근거 개선**: 추천 근거 요약에서 사용된 두께값, 역산/클램프 여부 표시.
+
+### Removed
+- `AUTO-4_산출방법_상세.xlsx` — 개발 참고용 파일, 프로덕션 불필요
+- `scripts/generate-auto4-excel.mjs`, `scripts/read-spec.mjs`, `scripts/read-spec2.mjs` — 개발 전용 스크립트
+
+---
+
 ## [1.0.0] - 2026-02-24 (최종 완료 버전)
 
 ### 개요

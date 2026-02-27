@@ -180,6 +180,14 @@ const COOLING_K_FACTOR: Record<string, number> = {
   TPU:   1.3,
 }
 
+// ─── 두께 역산 Safety Guard 상수 ─────────────────────────────────────────────
+/** 중량/면적 역산 두께의 최대 클램프값 (mm) — 이 이상이면 역산 신뢰 불가 */
+const THICKNESS_CLAMP_MAX        = 4.0
+/** 직접 입력 두께가 이 값(mm) 이상이면 데이터 오류로 판단 */
+const THICKNESS_SAFETY_THRESHOLD = 5.0
+/** Safety Guard 작동 시 대체할 기본 두께값 (mm) */
+const THICKNESS_SAFETY_DEFAULT   = 3.5
+
 // 재질 문자열에서 기준 키 추출: "PA6-GF30%" → "PA66", "PC+ABS NS5000CRT" → "PCABS"
 function normalizeMaterialKey(material: string): string {
   const upper = material.toUpperCase().replace(/\s/g, '')
@@ -421,16 +429,23 @@ function estimateDryCycleTime(clampingTon: number): number {
  * 유효 벽 두께 역산 (mm)
  * ① 부품 체적 = 중량 ÷ 밀도
  * ② 평균 두께 = 체적 ÷ 투영면적 (cm → mm 변환)
- * ③ 리브/보스 보정 × 0.82 → 냉각 기준 유효 두께
+ * ③ Safety Guard: 역산값 > THICKNESS_CLAMP_MAX(4mm) 이면 강제 클램프
+ * ④ 리브/보스 보정 × 0.82 → 냉각 기준 유효 두께
  *
- * 반환값: 유효 두께 mm, rawThicknessMm은 보정 전 값
+ * 클램프 이유: 중량↑ 또는 면적↓ 이상 조합 시 두께가 수십mm로 역산되어
+ * 냉각 공식(t²×k)이 수백초로 폭발하는 것을 방지
  */
-function estimateEffectiveThickness(part: Part): { effectiveMm: number; rawMm: number } {
+function estimateEffectiveThickness(
+  part: Part
+): { effectiveMm: number; rawMm: number; wasClamped: boolean } {
   const density      = getMaterialDensity(part.material)
   const volumeCm3    = part.part_weight_g / density
-  const rawMm        = (volumeCm3 / part.projected_area_cm2) * 10  // cm → mm
+  const rawMmCalc    = (volumeCm3 / part.projected_area_cm2) * 10  // cm → mm
+  // Safety Guard: 역산 두께는 최대 4mm 제한 (비정상 데이터 방지)
+  const wasClamped   = rawMmCalc > THICKNESS_CLAMP_MAX
+  const rawMm        = Math.min(rawMmCalc, THICKNESS_CLAMP_MAX)
   const effectiveMm  = rawMm * 0.82  // 리브·보스로 인한 체적 분산 보정
-  return { effectiveMm, rawMm }
+  return { effectiveMm, rawMm, wasClamped }
 }
 
 /**
@@ -462,19 +477,28 @@ export function predictCycleTime(part: Part): number {
     + params.areaFactor   * Math.sqrt(area)
     + (part.cavity_count - 1) * 2
 
-  // ── 두께 취득: notes 직접 입력 > 중량/면적 역산 ───────────────
+  // ── 두께 취득: Priority 1 직접 입력 > Priority 2 중량/면적 역산 ───
+  // Safety Guard 로직:
+  //   직접 입력값 ≥ 5mm → 데이터 오류 판단, 3.5mm 기본값 적용
+  //   역산값 > 4mm     → 4mm로 클램프 (estimateEffectiveThickness 내부 처리)
   const hasWeightArea  = part.part_weight_g > 0 && part.projected_area_cm2 > 0
   const explicitThick  = getThicknessFromNotes(part.notes)
 
   let thicknessMm: number | null = explicitThick
   let rawMm = 0
 
-  if (thicknessMm === null && hasWeightArea) {
+  if (thicknessMm !== null) {
+    // Priority 1: 직접 입력 두께 사용 (Safety Guard 적용)
+    if (thicknessMm >= THICKNESS_SAFETY_THRESHOLD) {
+      // 5mm 이상은 제품 높이를 두께로 오기입한 오류 케이스로 판단 → 3.5mm 고정
+      thicknessMm = THICKNESS_SAFETY_DEFAULT
+    }
+    rawMm = thicknessMm
+  } else if (hasWeightArea) {
+    // Priority 2: 중량/밀도/면적으로 역산 (최대 4mm 클램프 적용)
     const est    = estimateEffectiveThickness(part)
     thicknessMm  = est.effectiveMm
     rawMm        = est.rawMm
-  } else if (thicknessMm !== null) {
-    rawMm = thicknessMm  // 직접 입력된 경우 raw = 입력값 그대로
   }
 
   // ── 두께 기반 물리 공식: T_total = (t² × k) + T_dry ──────────
@@ -500,4 +524,52 @@ export function predictCycleTime(part: Part): number {
 
   const ct = hasGF ? ct_base * params.gfMultiplier : ct_base
   return Math.round(Math.max(15, Math.min(300, ct)))
+}
+
+// ────────────────────────────────────────────────────────────────
+// 두께 해석 결과 (UI 표시 / 디버깅용)
+// ────────────────────────────────────────────────────────────────
+
+export type ThicknessResolution = {
+  /** 실제 계산에 사용된 유효 두께 (mm) */
+  thicknessMm: number
+  /** 클램프/Safety Guard 적용 전 원본값 (mm) */
+  rawMm: number
+  /** 두께 출처: 'input' = 직접 입력, 'estimated' = 역산, 'safety_default' = 안전 기본값 적용 */
+  source: 'input' | 'estimated' | 'safety_default'
+  /** Safety Guard 또는 4mm 클램프가 적용되었으면 true */
+  wasClamped: boolean
+}
+
+/**
+ * 두께 해석 결과 조회 (UI 표시용)
+ * predictCycleTime() 과 동일한 우선순위 로직을 따름
+ */
+export function resolveEffectiveThickness(part: Part): ThicknessResolution {
+  const explicitThick = getThicknessFromNotes(part.notes)
+  const hasWeightArea = part.part_weight_g > 0 && part.projected_area_cm2 > 0
+
+  if (explicitThick !== null) {
+    if (explicitThick >= THICKNESS_SAFETY_THRESHOLD) {
+      return {
+        thicknessMm: THICKNESS_SAFETY_DEFAULT,
+        rawMm: explicitThick,
+        source: 'safety_default',
+        wasClamped: true,
+      }
+    }
+    return { thicknessMm: explicitThick, rawMm: explicitThick, source: 'input', wasClamped: false }
+  }
+
+  if (hasWeightArea) {
+    const est = estimateEffectiveThickness(part)
+    return {
+      thicknessMm: est.effectiveMm,
+      rawMm: est.rawMm,
+      source: est.wasClamped ? 'safety_default' : 'estimated',
+      wasClamped: est.wasClamped,
+    }
+  }
+
+  return { thicknessMm: 0, rawMm: 0, source: 'estimated', wasClamped: false }
 }

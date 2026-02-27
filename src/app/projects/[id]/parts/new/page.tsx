@@ -21,6 +21,7 @@ const emptyForm = {
   part_number: '', part_name: '', material: 'ABS',
   part_weight_g: '', projected_area_cm2: '', cavity_count: '1', runner_weight_g: '',
   product_width_mm: '', product_height_mm: '', product_depth_mm: '',
+  max_wall_thickness_mm: '',  // 최대 벽 두께 (C/T 냉각 계산 전용, 제품 높이와 별도)
   mold_width_mm: '', mold_height_mm: '', mold_depth_mm: '',
 }
 
@@ -122,9 +123,12 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
       return
     }
     setSaving(true)
-    // 제품 두께가 입력된 경우 notes에 포함 (냉각시간 계산에 활용)
-    const depthVal = parseFloat(form.product_depth_mm)
-    const notes = depthVal > 0 ? `thickness_mm:${depthVal}` : null
+    // 두께 우선순위: Max Wall Thickness(직접 입력) > 제품 높이(Depth)
+    // 두 값 모두 없으면 algorithm.ts 에서 중량/면적 역산으로 자동 보완
+    const wallThickVal = parseFloat(form.max_wall_thickness_mm)
+    const depthVal     = parseFloat(form.product_depth_mm)
+    const thicknessVal = wallThickVal > 0 ? wallThickVal : (depthVal > 0 ? depthVal : null)
+    const notes = thicknessVal !== null ? `thickness_mm:${thicknessVal}` : null
 
     const payload = {
       part_number: form.part_number,
@@ -223,12 +227,32 @@ export default function NewPartPage({ params }: { params: Promise<{ id: string }
                 placeholder="예: 200" className="bg-white" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="product_depth_mm">높이 (mm)</Label>
+              <Label htmlFor="product_depth_mm">높이/깊이 (mm)</Label>
               <Input id="product_depth_mm" name="product_depth_mm" type="number" step="0.1"
                 value={form.product_depth_mm} onChange={handleChange}
                 onCompositionStart={() => { composingRef.current = true }}
                 onCompositionEnd={handleCompositionEnd}
                 placeholder="예: 50" className="bg-white" />
+            </div>
+            {/* Max Wall Thickness 전용 입력 — 제품 높이와 별개 */}
+            <div className="col-span-3 border-t border-indigo-200 pt-3 mt-0.5">
+              <div className="grid grid-cols-3 gap-4 items-end">
+                <div className="space-y-1.5">
+                  <Label htmlFor="max_wall_thickness_mm">
+                    최대 벽 두께 (mm)
+                    <span className="ml-1.5 text-xs font-normal text-indigo-500">C/T 냉각 계산 전용</span>
+                  </Label>
+                  <Input id="max_wall_thickness_mm" name="max_wall_thickness_mm" type="number" step="0.1"
+                    value={form.max_wall_thickness_mm} onChange={handleChange}
+                    onCompositionStart={() => { composingRef.current = true }}
+                    onCompositionEnd={handleCompositionEnd}
+                    placeholder="예: 2.5" className="bg-white" />
+                </div>
+                <div className="col-span-2 text-xs text-indigo-400 pb-2 leading-relaxed">
+                  제품 외형 높이가 아닌 <strong>실제 벽 두께</strong>를 입력하세요.<br />
+                  미입력 시 중량÷밀도÷면적으로 자동 역산 (최대 4mm 제한)
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

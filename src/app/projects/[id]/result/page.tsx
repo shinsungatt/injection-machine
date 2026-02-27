@@ -19,6 +19,7 @@ import type { Part, Machine, Recommendation } from '@/lib/supabase'
 import {
   predictCycleTime, getResinPressure, getMaterialCorrection,
   calcRequiredClampingForce, calcRequiredShotWeight, getFinishFromNotes, hasSlideCore,
+  resolveEffectiveThickness,
 } from '@/lib/algorithm'
 
 type ResultItem = {
@@ -120,6 +121,18 @@ function CalcSummary({ part }: { part: Part }) {
   const runnerWeight = part.runner_weight_g ?? part.part_weight_g * 0.15
   const isCTPredicted = part.cycle_time_sec == null
   const ctValue = isCTPredicted ? predictCycleTime(part) : part.cycle_time_sec!
+  const thick = isCTPredicted ? resolveEffectiveThickness(part) : null
+
+  // 두께 출처 표시 레이블
+  const thickLabel = thick
+    ? thick.source === 'input'
+      ? `입력값 ${thick.thicknessMm.toFixed(1)}mm`
+      : thick.source === 'safety_default'
+      ? `${thick.rawMm.toFixed(1)}mm → 4mm↑ 오류, ${thick.thicknessMm.toFixed(1)}mm 고정`
+      : thick.wasClamped
+      ? `역산 ${thick.rawMm.toFixed(1)}mm (4mm 제한 적용)`
+      : `역산 ${thick.thicknessMm.toFixed(1)}mm`
+    : null
 
   return (
     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-2">
@@ -145,8 +158,11 @@ function CalcSummary({ part }: { part: Part }) {
           <span className="text-slate-400 shrink-0">C/T</span>
           {isCTPredicted ? (
             <span>
-              재질 {part.material} 기준 예측 (기본{' '}
-              {(() => { const p = part; return `${p.part_weight_g}g, ${p.projected_area_cm2}cm²` })()})
+              두께 {thickLabel}
+              {thick?.wasClamped && (
+                <span className="ml-1 text-amber-500 font-semibold">[클램프]</span>
+              )}
+              {' '}→ t²×k + dry
             </span>
           ) : (
             <span>실측값 입력</span>

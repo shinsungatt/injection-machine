@@ -1,6 +1,8 @@
 {
   "user-auth": {
-    "phase": "do",
+    "phase": "completed",
+    "matchRate": 91,
+    "completedAt": "2026-02-26T00:00:00Z",
     "matchRate": 0,
     "iterationCount": 0,
     "startedAt": "2026-02-26T00:00:00Z",
