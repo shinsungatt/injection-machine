@@ -1,16 +1,13 @@
 'use client'
 
 import { Factory, Clock, LogOut } from 'lucide-react'
-import { createClient } from '@/lib/supabase-browser'
-import { useRouter } from 'next/navigation'
+import { useAuth } from '@/components/AuthProvider'
 
 export default function PendingPage() {
-  const router = useRouter()
+  const { signOut } = useAuth()
 
-  const handleSignOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/auth/signup')
+  const handleSignOut = () => {
+    signOut()
   }
 
   return (

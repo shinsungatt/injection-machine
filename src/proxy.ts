@@ -52,13 +52,13 @@ export async function proxy(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    // 미승인 사용자 → 대기 페이지로 (대기 페이지 자체는 허용)
-    if (profile?.status !== 'approved' && path !== '/auth/pending') {
+    // 미승인 사용자 → 대기 페이지로 (admin은 status 무관하게 통과)
+    if (profile?.role !== 'admin' && profile?.status !== 'approved' && path !== '/auth/pending') {
       return NextResponse.redirect(new URL('/auth/pending', request.url))
     }
 
-    // 승인된 사용자 → 로그인/회원가입 페이지 접근 시 홈으로
-    if (profile?.status === 'approved' && isPublicPath) {
+    // 승인된 사용자(또는 admin) → 로그인/회원가입 페이지 접근 시 홈으로
+    if ((profile?.status === 'approved' || profile?.role === 'admin') && isPublicPath) {
       return NextResponse.redirect(new URL('/', request.url))
     }
 
