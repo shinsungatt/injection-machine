@@ -199,6 +199,7 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
 
   const dataStart = headerIdx + (isSubHeader ? 2 : 1)
   const seenNumbers = new Set<string>()
+  let partSeq = 0  // 파트번호 없을 때 순번 부여용 (1, 2, 3...)
   const parts = []
 
   for (let ri = dataStart; ri < rawRows.length; ri++) {
@@ -235,8 +236,9 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
     if (hasNameCol && !partNumber && !partName) continue
     if (/^(합계|total|소계|sub.?total)/i.test(partName || partNumber)) continue
 
-    // 중복 방지 (없으면 AUTO-N 자동 부여)
-    let pn = partNumber || `AUTO-${ri}`
+    // 중복 방지 (없으면 순번 자동 부여: 1, 2, 3...)
+    partSeq++
+    let pn = partNumber || String(partSeq)
     if (seenNumbers.has(pn)) {
       let suffix = 2
       while (seenNumbers.has(`${pn}-${suffix}`)) suffix++

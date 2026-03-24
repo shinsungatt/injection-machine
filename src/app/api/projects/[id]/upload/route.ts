@@ -306,6 +306,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parts = []
   let skipped = 0
   let filteredInjection = 0
+  let partSeq = 0  // 파트번호 없을 때 순번 부여용 (1, 2, 3...)
   const seenNumbers = new Set<string>()
 
   for (let ri = dataStart; ri < rawRows.length; ri++) {
@@ -352,7 +353,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (/^(합계|total|소계|sub.?total|소 계)/i.test(partName || partNumber)) continue
 
     // Ensure unique part_number within this batch
-    let pn = partNumber || `AUTO-${ri}`
+    partSeq++
+    let pn = partNumber || String(partSeq)
     if (seenNumbers.has(pn)) {
       let suffix = 2
       while (seenNumbers.has(`${pn}-${suffix}`)) suffix++
