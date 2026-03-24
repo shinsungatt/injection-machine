@@ -15,7 +15,7 @@ import type { Part } from '@/lib/supabase'
 
 type PdfFile = { id: string; name: string; file_url: string | null }
 
-const MATERIALS = ['PP', 'ABS', 'PA66', 'PA', 'PC', 'POM', 'PE', 'PS', 'PET', 'TPE']
+const MATERIALS = ['PP', 'ABS', 'PC+ABS', 'PA66', 'PA', 'PC', 'POM', 'PE', 'PS', 'PET', 'TPE']
 
 const emptyForm = {
   part_number: '', part_name: '', material: 'ABS',
