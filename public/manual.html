@@ -12,6 +12,8 @@
     --gray-light: #f9fafb;
     --border: #e5e7eb;
     --text: #111827;
+    --purple: #7c3aed;
+    --purple-light: #f3e8ff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -103,6 +105,7 @@
   .card.blue { background: var(--blue-light); border-color: #93c5fd; }
   .card.yellow { background: #fefce8; border-color: #fde047; }
   .card.green { background: #f0fdf4; border-color: #86efac; }
+  .card.purple { background: var(--purple-light); border-color: #c4b5fd; }
   .card .card-title { font-weight: 700; margin-bottom: 6px; }
 
   /* 테이블 */
@@ -164,9 +167,11 @@
     padding: 1px 7px;
     border-radius: 4px;
   }
-  .tag.green { background: #dcfce7; color: #16a34a; }
-  .tag.red   { background: #fee2e2; color: #dc2626; }
-  .tag.gray  { background: #f3f4f6; color: #374151; }
+  .tag.green  { background: #dcfce7; color: #16a34a; }
+  .tag.red    { background: #fee2e2; color: #dc2626; }
+  .tag.gray   { background: #f3f4f6; color: #374151; }
+  .tag.purple { background: var(--purple-light); color: var(--purple); }
+  .tag.orange { background: #fff7ed; color: #ea580c; }
 
   /* 공식 박스 */
   .formula {
@@ -190,8 +195,22 @@
     margin: 12px 0;
     font-size: 13px;
   }
-  .tip.warn { border-color: #f59e0b; background: #fef3c7; }
-  .tip.info { border-color: #10b981; background: #d1fae5; }
+  .tip.warn   { border-color: #f59e0b; background: #fef3c7; }
+  .tip.info   { border-color: #10b981; background: #d1fae5; }
+  .tip.purple { border-color: var(--purple); background: var(--purple-light); }
+
+  /* NEW 뱃지 */
+  .new-badge {
+    display: inline-block;
+    background: #16a34a;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
 
   /* 인쇄 버튼 */
   .print-bar {
@@ -240,7 +259,7 @@
     <h1>사출설비 선택 시스템</h1>
     <h2>Injection Molding Machine Selection System</h2>
     <p class="meta">파트리스트 기반 최적 사출성형 설비 자동 추천 시스템</p>
-    <p class="meta" style="margin-top:8px;">버전 1.0 &nbsp;|&nbsp; 2026</p>
+    <p class="meta" style="margin-top:8px;">버전 1.1 &nbsp;|&nbsp; 2026</p>
   </div>
 
   <!-- ② 목차 -->
@@ -255,9 +274,10 @@
       <li><a href="#s6">파트 수동 입력</a></li>
       <li><a href="#s7">설비 추천 실행</a></li>
       <li><a href="#s8">결과 확인 및 해석</a></li>
-      <li><a href="#s9">파일 첨부 (도면·CAD·STP)</a></li>
-      <li><a href="#s10">계산 로직 상세</a></li>
-      <li><a href="#s11">자주 묻는 질문 (FAQ)</a></li>
+      <li><a href="#s9">도면·CAD·STP 파일 관리 &amp; AI 분석</a></li>
+      <li><a href="#s10">고객사 이력 조회</a></li>
+      <li><a href="#s11">계산 로직 상세</a></li>
+      <li><a href="#s12">자주 묻는 질문 (FAQ)</a></li>
     </ol>
   </div>
 
@@ -276,15 +296,17 @@
         <li>Excel BOM 파일 자동 파싱 — 한글·영문·혼용 컬럼명 모두 인식</li>
         <li>투영면적·금형 크기 자동 계산 (제품 사이즈 입력 시)</li>
         <li>형체력·사출량·금형 크기 기반 적합 설비 자동 추천</li>
-        <li>설비 활용률(60~85% 권장) 기준 최적 순위 제공</li>
+        <li>설비 활용률 (60~85% 권장) 기준 최적 순위 제공</li>
         <li>예상 사이클타임(C/T) 자동 예측</li>
-        <li>도면 PDF / CAD / STP 파일 첨부 보관</li>
+        <li>PDF 도면 AI 자동 분석 (도번·품명·재질·치수 추출) <span class="new-badge">NEW</span></li>
+        <li>도면 PDF / CAD / STP 대용량 파일 첨부 (제한 없음) <span class="new-badge">NEW</span></li>
+        <li>고객사별 프로젝트 이력 통합 조회 <span class="new-badge">NEW</span></li>
       </ul>
     </div>
     <div class="card yellow">
       <div class="card-title">⚠️ 사용 환경</div>
-      인터넷 브라우저(Chrome 권장)에서 접속합니다. 별도 설치 불필요.<br>
-      로컬 서버 주소: <code style="background:#fef08a;padding:1px 6px;border-radius:4px;">http://localhost:3000</code>
+      인터넷 브라우저 (Chrome 권장)에서 접속합니다. 별도 설치 불필요.<br>
+      서비스 주소: <code style="background:#fef08a;padding:1px 6px;border-radius:4px;">https://injection-machine.vercel.app</code>
     </div>
   </div>
 
@@ -293,13 +315,13 @@
   <!-- ──────────────────────────────────────────── -->
   <div class="section page-break" id="s2">
     <h2><span class="num">2</span> 화면 구성 및 메뉴</h2>
-    <p>상단 내비게이션 바에서 세 가지 주요 메뉴로 이동합니다.</p>
+    <p>상단 내비게이션 바에서 주요 메뉴로 이동합니다.</p>
     <table>
       <tr><th>메뉴</th><th>설명</th><th>주요 기능</th></tr>
       <tr>
         <td><span class="tag">대시보드</span></td>
         <td>홈 화면</td>
-        <td>전체 프로젝트 현황, 설비 통계, 최근 활동 요약</td>
+        <td>전체 프로젝트 현황, 설비 통계, 고객사 수, 최근 활동 요약</td>
       </tr>
       <tr>
         <td><span class="tag">설비 관리</span></td>
@@ -311,11 +333,21 @@
         <td>견적·프로젝트 단위 관리</td>
         <td>BOM 업로드, 파트 목록, 설비 추천 실행, 결과 보기</td>
       </tr>
+      <tr>
+        <td><span class="tag purple">고객사 이력</span> <span class="new-badge">NEW</span></td>
+        <td>고객사별 프로젝트 이력</td>
+        <td>고객사명 기준 그룹핑, 모델별 상태·파트 수 한눈에 확인</td>
+      </tr>
+      <tr>
+        <td><span class="tag gray">사용설명서</span></td>
+        <td>본 문서</td>
+        <td>기능 안내, FAQ, 계산 로직 설명</td>
+      </tr>
     </table>
     <div class="card">
-      <div class="card-title">화면 흐름</div>
+      <div class="card-title">기본 업무 흐름</div>
       <p style="font-size:13px;">
-        프로젝트 생성 → Excel 업로드(또는 수동 파트 입력) → <strong>설비 추천 실행</strong> → 결과 확인
+        프로젝트 생성 → Excel 업로드(또는 수동 파트 입력) → 도면 첨부 및 AI 분석(선택) → <strong>설비 추천 실행</strong> → 결과 확인
       </p>
     </div>
   </div>
@@ -362,8 +394,12 @@
     <ol class="steps">
       <li>상단 <span class="tag">프로젝트</span> 메뉴 클릭</li>
       <li><span class="tag">+ 새 프로젝트</span> 버튼 클릭</li>
-      <li>프로젝트명, 고객사명, 모델명 입력 후 저장</li>
+      <li>프로젝트명(고객사명), 모델명 입력 후 저장</li>
     </ol>
+    <div class="tip">
+      💡 <strong>프로젝트명</strong>에 고객사명을 입력하면 <span class="tag purple">고객사 이력</span> 메뉴에서
+      고객사별로 자동 그룹핑되어 조회됩니다.
+    </div>
 
     <h3>프로젝트 상태</h3>
     <table>
@@ -384,7 +420,7 @@
     <h2><span class="num">5</span> Excel 파트리스트 업로드</h2>
     <p>
       프로젝트 상세 화면의 <span class="tag green">파트리스트 Excel</span> 카드에서
-      <code>.xlsx / .xls</code> 파일을 드래그&드롭하거나 클릭하여 업로드합니다.
+      <code>.xlsx / .xls</code> 파일을 드래그&amp;드롭하거나 클릭하여 업로드합니다.
     </p>
 
     <h3>지원 파일 형식</h3>
@@ -392,30 +428,44 @@
       <tr><th>항목</th><th>내용</th></tr>
       <tr><td>파일 형식</td><td>.xlsx, .xls (Excel 2007 이상 권장)</td></tr>
       <tr><td>시트 선택</td><td>인식 컬럼 수가 가장 많은 시트 자동 선택</td></tr>
-      <tr><td>헤더 행 위치</td><td>1~6행 내 자동 탐색</td></tr>
+      <tr><td>헤더 행 위치</td><td>1~10행 내 자동 탐색</td></tr>
       <tr><td>2행 헤더</td><td>병합 헤더 + 서브 헤더 구조도 인식</td></tr>
-      <tr><td>최대 파일 크기</td><td>20 MB</td></tr>
+      <tr><td>파트번호 자동 부여</td><td>파트번호 없으면 파트리스트 순서대로 1, 2, 3… 자동 부여</td></tr>
+    </table>
+
+    <h3>컬럼 매칭 결과 표시</h3>
+    <p>업로드 후 인식된 컬럼과 미인식 컬럼을 시각적으로 표시합니다.</p>
+    <table>
+      <tr><th>표시</th><th>의미</th></tr>
+      <tr>
+        <td><span class="tag green">✓ 컬럼명</span></td>
+        <td>시스템이 인식하여 자동 매핑된 컬럼</td>
+      </tr>
+      <tr>
+        <td><span class="tag orange">! 컬럼명</span></td>
+        <td>인식되지 않은 컬럼 — 아래 별칭 목록 참고하여 컬럼명 수정 권장</td>
+      </tr>
     </table>
 
     <h3>인식 가능한 컬럼명 목록</h3>
     <p>아래 컬럼명 중 하나 이상이 헤더에 포함되면 자동으로 매핑됩니다. <strong>한글·영문·혼용 모두 인식</strong>합니다.</p>
     <table>
-      <tr><th>내부 필드</th><th>인식 컬럼명 (일부 예시)</th></tr>
+      <tr><th>내부 필드</th><th>인식 컬럼명 (예시)</th></tr>
       <tr>
         <td>파트번호</td>
-        <td><code>도번</code> <code>품번</code> <code>부품번호</code> <code>NO</code> <code>No.</code> <code>번호</code> <code>연번</code> <code>순번</code> <code>part_number</code></td>
+        <td><code>도번</code> <code>품번</code> <code>부품번호</code> <code>NO</code> <code>No.</code> <code>번호</code> <code>연번</code> <code>순번</code> <code>품목번호</code> <code>part_number</code></td>
       </tr>
       <tr>
         <td>파트명</td>
-        <td><code>품명</code> <code>품목명</code> <code>명칭</code> <code>품목</code> <code>부품명</code> <code>제품명</code> <code>아이템명</code> <code>파트명</code> <code>part name</code></td>
+        <td><code>품명</code> <code>품목명</code> <code>명칭</code> <code>품목</code> <code>부품명</code> <code>제품명</code> <code>아이템명</code> <code>파트명</code> <code>parts name</code> <code>part name</code></td>
       </tr>
       <tr>
         <td>재질</td>
-        <td><code>원재료</code> <code>재질</code> <code>소재</code> <code>소재명</code> <code>원소재</code> <code>material</code></td>
+        <td><code>원재료</code> <code>재질</code> <code>소재</code> <code>소재명</code> <code>원소재</code> <code>원자재</code> <code>material</code> <code>mat</code></td>
       </tr>
       <tr>
         <td>파트 중량(g)</td>
-        <td><code>중량</code> <code>설계중량</code> <code>단중</code> <code>net 중량</code> <code>순중량</code> <code>weight</code></td>
+        <td><code>중량</code> <code>설계중량</code> <code>단중</code> <code>net 중량</code> <code>순중량</code> <code>예상중량</code> <code>weight</code> <code>expected weight g</code></td>
       </tr>
       <tr>
         <td>런너 중량(g)</td>
@@ -423,11 +473,11 @@
       </tr>
       <tr>
         <td>캐비티 수</td>
-        <td><code>캐비티</code> <code>캐비티수</code> <code>수량</code> <code>소요량</code> <code>cavity</code> <code>qty</code></td>
+        <td><code>캐비티</code> <code>캐비티수</code> <code>수량</code> <code>소요량</code> <code>cavity</code> <code>qty</code> <code>quantity per set</code></td>
       </tr>
       <tr>
         <td>투영면적(cm²)</td>
-        <td><code>투영면적</code> <code>투영면적 cm2</code> <code>projected area</code></td>
+        <td><code>투영면적</code> <code>투영면적 cm2</code> <code>projected area</code> <code>projected_area_cm2</code></td>
       </tr>
       <tr>
         <td>제품 가로/세로/높이(mm)</td>
@@ -445,12 +495,15 @@
         <td>사이클타임(sec)</td>
         <td><code>예상 C/Time</code> <code>C/T</code> <code>사이클타임</code> <code>cycle time</code></td>
       </tr>
+      <tr>
+        <td>표면처리/도장</td>
+        <td><code>표면처리</code> <code>도장</code> <code>도장사양</code> <code>마감처리</code> <code>finish</code> <code>surface finish</code></td>
+      </tr>
+      <tr>
+        <td>비고</td>
+        <td><code>비고</code> <code>특이사항</code> <code>메모</code> <code>remark</code> <code>note</code></td>
+      </tr>
     </table>
-
-    <div class="tip">
-      💡 <strong>파트번호 컬럼이 없어도 됩니다.</strong> 파트명(품명 등)만 있으면 업로드 가능합니다.
-      파트번호가 비어 있으면 AUTO-1, AUTO-2 형태로 자동 부여됩니다.
-    </div>
 
     <h3>자동 계산 항목</h3>
     <table>
@@ -482,9 +535,13 @@
     <table>
       <tr><th>컬럼명</th><th>사출 판정 기준</th></tr>
       <tr><td><code>구분 사출</code></td><td>비어 있지 않은 셀 = 사출 파트</td></tr>
-      <tr><td><code>구분</code></td><td><code>MOLD</code>, <code>사출</code>, <code>INJ</code>로 시작하는 행</td></tr>
-      <tr><td><code>Type</code> / <code>part type</code></td><td><code>IJ</code>, <code>INJ</code>, <code>PLT</code>, <code>PLASTIC</code>으로 시작하는 행</td></tr>
+      <tr><td><code>구 분</code> / <code>구분</code></td><td>PRESS·CAST·DIE·구매·BUY 등 명확히 비-사출인 행만 제외, 나머지 포함</td></tr>
+      <tr><td><code>Type</code> / <code>part type</code></td><td><code>IJ</code>, <code>INJ</code>, <code>PLT</code>, <code>PLASTIC</code>으로 시작하는 행 포함</td></tr>
     </table>
+    <div class="tip">
+      💡 <strong>파트번호 컬럼이 없어도 됩니다.</strong> 파트명(품명 등)만 있으면 업로드 가능합니다.
+      파트번호가 비어 있으면 파트리스트 순서에 따라 <strong>1, 2, 3…</strong> 으로 자동 부여됩니다.
+    </div>
   </div>
 
   <!-- ──────────────────────────────────────────── -->
@@ -496,10 +553,26 @@
 
     <ol class="steps">
       <li>프로젝트 상세 화면에서 <span class="tag">+ 파트 수동 입력</span> 버튼 클릭</li>
-      <li>파트번호, 파트명, 재질 입력</li>
+      <li>파트번호, 파트명, 재질 선택</li>
       <li><strong>제품 사이즈(mm)</strong> 입력 → 투영면적·금형 크기 자동 계산</li>
       <li>중량(g), 캐비티 수 입력 후 저장</li>
     </ol>
+
+    <h3>선택 가능한 재질 목록</h3>
+    <table>
+      <tr><th>재질</th><th>수지압력 (kgf/cm²)</th><th>비고</th></tr>
+      <tr><td>PP</td><td>300</td><td>범용 폴리프로필렌</td></tr>
+      <tr><td>ABS</td><td>350</td><td>범용 사출 소재</td></tr>
+      <tr><td>PC+ABS</td><td>400</td><td>충격강도·내열성 향상 합금 <span class="new-badge">NEW</span></td></tr>
+      <tr><td>PA66</td><td>400</td><td>나일론 66</td></tr>
+      <tr><td>PA</td><td>400</td><td>나일론 계열</td></tr>
+      <tr><td>PC</td><td>450</td><td>폴리카보네이트</td></tr>
+      <tr><td>POM</td><td>350</td><td>폴리아세탈</td></tr>
+      <tr><td>PE</td><td>280</td><td>폴리에틸렌</td></tr>
+      <tr><td>PS</td><td>320</td><td>폴리스티렌</td></tr>
+      <tr><td>PET</td><td>380</td><td>폴리에스터</td></tr>
+      <tr><td>TPE</td><td>300</td><td>열가소성 탄성체</td></tr>
+    </table>
 
     <div class="tip">
       💡 <strong>제품 사이즈 붙여넣기:</strong> "가로×세로×높이 붙여넣기" 버튼을 누르면
@@ -567,45 +640,107 @@
   </div>
 
   <!-- ──────────────────────────────────────────── -->
-  <!-- 9. 파일 첨부 -->
+  <!-- 9. 파일 첨부 & AI 분석 -->
   <!-- ──────────────────────────────────────────── -->
   <div class="section" id="s9">
-    <h2><span class="num">9</span> 파일 첨부 (도면·CAD·STP)</h2>
+    <h2><span class="num">9</span> 도면·CAD·STP 파일 관리 &amp; AI 분석</h2>
     <p>프로젝트 상세 화면의 파일 업로드 카드에서 첨부 파일을 관리합니다.</p>
+
+    <h3>파일 업로드</h3>
     <table>
-      <tr><th>카드</th><th>허용 형식</th><th>최대 크기</th></tr>
+      <tr><th>카드</th><th>허용 형식</th><th>최대 크기</th><th>업로드 방식</th></tr>
       <tr>
         <td><span class="tag green">파트리스트 Excel</span></td>
         <td>.xlsx, .xls, .csv</td>
         <td>제한 없음</td>
+        <td>서버 파싱 후 DB 저장</td>
       </tr>
       <tr>
         <td><span class="tag red">도면 PDF</span></td>
         <td>.pdf</td>
-        <td>20 MB</td>
+        <td><strong>제한 없음</strong> <span class="new-badge">NEW</span></td>
+        <td>Supabase Storage 직접 업로드</td>
       </tr>
       <tr>
         <td><span class="tag">도면 CAD</span></td>
         <td>.dwg, .dxf, .sldprt, .prt</td>
-        <td>20 MB</td>
+        <td><strong>제한 없음</strong> <span class="new-badge">NEW</span></td>
+        <td>Supabase Storage 직접 업로드</td>
       </tr>
       <tr>
-        <td><span class="tag" style="background:#f3e8ff;color:#7c3aed;">STP 파일</span></td>
+        <td><span class="tag purple">STP 파일</span></td>
         <td>.stp, .step, .igs, .iges</td>
-        <td>20 MB</td>
+        <td><strong>제한 없음</strong> <span class="new-badge">NEW</span></td>
+        <td>Supabase Storage 직접 업로드</td>
       </tr>
     </table>
+
     <div class="tip info">
-      ✅ 파일은 DB에 안전하게 저장되며, 파일명 옆 <strong>열기</strong> 링크로 다운로드 가능합니다.
-      <code>×</code> 버튼으로 삭제합니다.
+      ✅ PDF·CAD·STP 파일은 브라우저에서 Supabase Storage에 직접 업로드되므로
+      서버 용량 제한 없이 대용량 도면도 올릴 수 있습니다. 업로드 진행률이 실시간으로 표시됩니다.
+    </div>
+
+    <h3>AI 도면 분석 (PDF 전용) <span class="new-badge">NEW</span></h3>
+    <p>업로드된 PDF 도면에서 파트 정보를 AI가 자동으로 추출합니다.</p>
+
+    <div class="card purple">
+      <div class="card-title">✨ AI 분석 추출 항목</div>
+      <ul style="padding-left:18px;">
+        <li><strong>도번 (part_number)</strong> — 도면 표제란 도번</li>
+        <li><strong>품명 (part_name)</strong> — 도면 품명</li>
+        <li><strong>재질 (material)</strong> — ABS, PC+ABS, PP-GF30 등</li>
+        <li><strong>제품 치수</strong> — 가로·세로·높이(mm)</li>
+        <li><strong>투영면적(cm²)</strong> — 치수에서 자동 계산</li>
+        <li><strong>중량(g)</strong> — 도면 기재 중량</li>
+        <li><strong>캐비티 수</strong> — 도면 기재 수량</li>
+        <li><strong>특이사항</strong> — 슬라이드·언더컷·표면처리 등</li>
+      </ul>
+    </div>
+
+    <h3>AI 분석 사용 방법</h3>
+    <ol class="steps">
+      <li>PDF 도면 파일 업로드 완료 후 목록에서 해당 파일 확인</li>
+      <li>파일 옆 <span class="tag purple">✨ AI분석</span> 버튼 클릭</li>
+      <li>분석 완료 후 추출된 파트 정보 확인 (보라색 카드로 표시)</li>
+      <li><span class="tag">파트 추가</span> 버튼 클릭하면 파트리스트에 바로 등록</li>
+    </ol>
+
+    <div class="tip warn">
+      ⚠️ AI 분석은 Claude AI API를 사용합니다. 분석 비용이 발생할 수 있으며,
+      도면 품질과 기재 내용에 따라 추출 정확도가 달라질 수 있습니다.
+      추출된 데이터는 반드시 확인 후 사용하세요.
     </div>
   </div>
 
   <!-- ──────────────────────────────────────────── -->
-  <!-- 10. 계산 로직 -->
+  <!-- 10. 고객사 이력 -->
   <!-- ──────────────────────────────────────────── -->
   <div class="section page-break" id="s10">
-    <h2><span class="num">10</span> 계산 로직 상세</h2>
+    <h2><span class="num">10</span> 고객사 이력 조회 <span class="new-badge">NEW</span></h2>
+    <p>상단 메뉴 <span class="tag purple">고객사 이력</span> 을 클릭하면 고객사별로 프로젝트를 그룹핑하여 조회합니다.</p>
+
+    <div class="card blue">
+      <div class="card-title">주요 기능</div>
+      <ul style="padding-left:18px;">
+        <li>고객사명(프로젝트명) 기준으로 자동 그룹핑</li>
+        <li>고객사별 모델 수, 전체 파트 수, 상태별 건수 요약</li>
+        <li>카드 클릭 시 해당 고객사의 모든 모델(프로젝트) 펼쳐 보기</li>
+        <li>모델별 상태, 파트 수, 등록일 표시</li>
+        <li>모델명 클릭 → 해당 프로젝트 상세 화면으로 바로 이동</li>
+      </ul>
+    </div>
+
+    <div class="tip">
+      💡 <strong>고객사명 활용 팁:</strong> 프로젝트 생성 시 <em>프로젝트명</em>에 고객사 정식 명칭을
+      동일하게 입력하면 고객사 이력 화면에서 자동으로 묶여 표시됩니다.
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────── -->
+  <!-- 11. 계산 로직 -->
+  <!-- ──────────────────────────────────────────── -->
+  <div class="section" id="s11">
+    <h2><span class="num">11</span> 계산 로직 상세</h2>
 
     <h3>필요 형체력 (ton)</h3>
     <div class="formula">
@@ -616,6 +751,7 @@
       <tr><th>재질</th><th>수지압력 (kgf/cm²)</th></tr>
       <tr><td>PP</td><td>300</td></tr>
       <tr><td>ABS</td><td>350</td></tr>
+      <tr><td>PC+ABS</td><td>400</td></tr>
       <tr><td>POM</td><td>350</td></tr>
       <tr><td>PA6 / PA66</td><td>400</td></tr>
       <tr><td>PC</td><td>450</td></tr>
@@ -646,6 +782,7 @@
       <tr><th>재질</th><th>기본값(sec)</th><th>중량계수</th><th>면적계수</th></tr>
       <tr><td>PP</td><td>15</td><td>0.15</td><td>1.5</td></tr>
       <tr><td>ABS</td><td>12</td><td>0.12</td><td>1.2</td></tr>
+      <tr><td>PC+ABS</td><td>16</td><td>0.18</td><td>1.6</td></tr>
       <tr><td>PA6/PA66</td><td>18</td><td>0.20</td><td>1.5</td></tr>
       <tr><td>PC</td><td>20</td><td>0.25</td><td>2.0</td></tr>
       <tr><td>POM</td><td>18</td><td>0.20</td><td>1.5</td></tr>
@@ -653,21 +790,35 @@
   </div>
 
   <!-- ──────────────────────────────────────────── -->
-  <!-- 11. FAQ -->
+  <!-- 12. FAQ -->
   <!-- ──────────────────────────────────────────── -->
-  <div class="section" id="s11">
-    <h2><span class="num">11</span> 자주 묻는 질문 (FAQ)</h2>
+  <div class="section page-break" id="s12">
+    <h2><span class="num">12</span> 자주 묻는 질문 (FAQ)</h2>
 
     <h3>Q. Excel 업로드 시 "유효한 파트 데이터를 찾을 수 없습니다" 오류가 납니다.</h3>
     <div class="card">
-      <p><strong>원인:</strong> 헤더 행에 인식 가능한 컬럼명이 하나도 없는 경우입니다.</p>
+      <p><strong>원인:</strong> 헤더 행에 인식 가능한 컬럼명이 하나도 없거나, 헤더가 10행 이후에 위치한 경우입니다.</p>
       <p><strong>해결:</strong> 5장의 <em>인식 가능한 컬럼명 목록</em>을 참고하여 헤더 행에
-      <code>품명</code>, <code>재질</code>, <code>중량</code> 등 하나 이상의 컬럼명이 있는지 확인하세요.</p>
+      <code>품명</code>, <code>재질</code>, <code>중량</code> 등 하나 이상의 컬럼명이 있는지 확인하세요.
+      헤더가 1~10행 안에 있는지도 확인하세요.</p>
+    </div>
+
+    <h3>Q. 파트번호가 원하는 순서대로 나오지 않습니다.</h3>
+    <div class="card">
+      파트번호가 비어 있으면 파트리스트 행 순서대로 <strong>1, 2, 3…</strong> 자동 부여됩니다.
+      Excel에 파트번호 컬럼이 있고 값이 입력된 경우 해당 값이 그대로 사용됩니다.
+    </div>
+
+    <h3>Q. 구분(mold_type) 컬럼이 있는데 일부 파트가 누락됩니다.</h3>
+    <div class="card">
+      <code>구분</code> 컬럼에서 PRESS·DIE·CAST·구매·BUY·ASSY 등 <strong>명확히 비-사출</strong>인 값만 제외됩니다.
+      MOLD, MTC 전용 등 기타 값은 모두 포함됩니다. 제외된 행이 사출 파트라면 해당 셀 값을 <code>MOLD</code>로 수정하세요.
     </div>
 
     <h3>Q. 파트리스트에 부품번호(도번) 컬럼이 없어도 됩니까?</h3>
     <div class="card">
-      네. 파트명(품명 등)만 있어도 업로드됩니다. 파트번호가 없으면 AUTO-1, AUTO-2 로 자동 부여됩니다.
+      네. 파트명(품명 등)만 있어도 업로드됩니다.
+      파트번호가 없으면 파트리스트 순서대로 1, 2, 3… 으로 자동 부여됩니다.
     </div>
 
     <h3>Q. 설비 추천이 "추천 설비 없음"으로 나옵니다.</h3>
@@ -686,21 +837,29 @@
       초(sec) 단위로 입력하면 해당 값이 우선 적용됩니다.
     </div>
 
+    <h3>Q. AI 도면 분석 결과가 부정확합니다.</h3>
+    <div class="card">
+      AI 분석 정확도는 도면 품질과 기재 내용에 따라 다릅니다.
+      스캔 품질이 낮거나 표제란 정보가 불명확한 경우 누락될 수 있습니다.
+      추출된 데이터를 화면에서 확인한 후 수정하여 등록하세요.
+    </div>
+
+    <h3>Q. PDF·CAD 파일은 몇 개까지 첨부 가능합니까?</h3>
+    <div class="card">
+      파일 수·용량 제한 없이 첨부 가능합니다.
+      대용량 파일은 Supabase Storage에 직접 업로드되어 진행률이 실시간으로 표시됩니다.
+    </div>
+
     <h3>Q. 같은 파일을 두 번 업로드하면 어떻게 됩니까?</h3>
     <div class="card">
       파트가 중복 추가됩니다. 기존 파트는 삭제 후 재업로드하거나,
       프로젝트 상세 화면에서 파트 목록의 <span class="tag red">🗑️</span> 버튼으로 개별 삭제하세요.
     </div>
-
-    <h3>Q. PDF·CAD 파일은 몇 개까지 첨부 가능합니까?</h3>
-    <div class="card">
-      파일 수 제한 없이 여러 개 첨부 가능합니다. 단, 파일 1개당 최대 20 MB입니다.
-    </div>
   </div>
 
   <!-- 푸터 -->
   <div style="border-top:1px solid var(--border);padding-top:20px;text-align:center;color:var(--gray);font-size:12px;margin-top:40px;">
-    사출설비 선택 시스템 사용 설명서 &nbsp;|&nbsp; v1.0 &nbsp;|&nbsp; 2026
+    사출설비 선택 시스템 사용 설명서 &nbsp;|&nbsp; v1.1 &nbsp;|&nbsp; 2026
   </div>
 
 </div><!-- /.wrapper -->
