@@ -78,13 +78,14 @@ const UPLOAD_CARDS: UploadCardConfig[] = [
 ]
 
 function UploadCard({
-  config, files, onUpload, onDelete, uploading,
+  config, files, onUpload, onDelete, uploading, uploadProgress,
 }: {
   config: UploadCardConfig
   files: ProjectFile[]
   onUpload: (type: string, file: File) => void
   onDelete: (fileId: string) => void
   uploading: string | null
+  uploadProgress: number
 }) {
   const [drag, setDrag] = useState(false)
   const ref = useRef<HTMLInputElement>(null)
@@ -145,8 +146,19 @@ function UploadCard({
           <input ref={ref} type="file" accept={config.accept} className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) { onUpload(config.type, f); e.target.value = '' } }} />
           {isUploading ? (
-            <div className="flex items-center justify-center gap-2 text-xs text-blue-600">
-              <RefreshCw className="h-3 w-3 animate-spin" /> 업로드 중...
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-center gap-2 text-xs text-blue-600">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                {uploadProgress > 0 ? `${uploadProgress}%` : '업로드 중...'}
+              </div>
+              {uploadProgress > 0 && (
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="bg-blue-500 h-1.5 rounded-full transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-center gap-1 text-xs text-gray-400">
@@ -169,6 +181,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
   const [uploading, setUploading] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
   const [selectedParts, setSelectedParts] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
@@ -238,35 +251,75 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const handleFileUpload = async (type: string, file: File) => {
     setUploading(type)
+    setUploadProgress(0)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('type', type)
-      const res = await fetch(`/api/projects/${projectId}/files`, { method: 'POST', body: fd })
-      if (!res.ok) {
-        let errorMsg = '업로드 실패'
-        try {
-          const errData = await res.json()
-          errorMsg = errData.error || errorMsg
-        } catch {
-          if (res.status === 413) errorMsg = '파일 크기가 너무 큽니다. (최대 4.5MB)'
-          else errorMsg = `서버 오류 (${res.status})`
+      if (type === 'excel') {
+        // Excel은 기존 방식 유지 (파트 파싱이 필요)
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('type', type)
+        const res = await fetch(`/api/projects/${projectId}/files`, { method: 'POST', body: fd })
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          toast.error(errData.error || `서버 오류 (${res.status})`)
+          return
         }
-        toast.error(errorMsg)
+        const data = await res.json()
+        toast.success(`파트리스트 업로드 완료 — ${data.count}개 파트 등록`)
+        fetchData(projectId)
         return
       }
-      const data = await res.json()
-      if (type === 'excel') {
-        toast.success(`파트리스트 업로드 완료 — ${data.count}개 파트 등록`)
-      } else {
-        toast.success(`${file.name} 업로드 완료`)
+
+      // ── PDF / CAD / STP: Supabase Storage 직접 업로드 (용량 제한 없음) ──
+      // Step 1: 서명된 업로드 URL 발급
+      const presignRes = await fetch(`/api/projects/${projectId}/files/presign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, fileType: type }),
+      })
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}))
+        toast.error(err.error || '업로드 URL 생성 실패')
+        return
       }
+      const { uploadUrl, storagePath } = await presignRes.json()
+
+      // Step 2: XHR로 Supabase Storage에 직접 PUT (진행률 추적 가능)
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.onprogress = e => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.open('PUT', uploadUrl)
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+        xhr.onload = () => {
+          if (xhr.status < 400) resolve()
+          else reject(new Error(`스토리지 업로드 오류 (${xhr.status})`))
+        }
+        xhr.onerror = () => reject(new Error('네트워크 오류'))
+        xhr.send(file)
+      })
+
+      // Step 3: 메타데이터 DB 저장
+      const confirmRes = await fetch(`/api/projects/${projectId}/files/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storagePath, fileName: file.name, fileType: type, fileSize: file.size }),
+      })
+      if (!confirmRes.ok) {
+        const err = await confirmRes.json().catch(() => ({}))
+        toast.error(err.error || '파일 정보 저장 실패')
+        return
+      }
+
+      toast.success(`${file.name} 업로드 완료`)
       fetchData(projectId)
     } catch (e) {
       const msg = e instanceof Error ? e.message : '알 수 없는 오류'
-      toast.error(`업로드 중 오류가 발생했습니다: ${msg}`)
+      toast.error(`업로드 중 오류: ${msg}`)
     } finally {
       setUploading(null)
+      setUploadProgress(0)
     }
   }
 
@@ -345,6 +398,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               onUpload={handleFileUpload}
               onDelete={handleFileDelete}
               uploading={uploading}
+              uploadProgress={uploadProgress}
             />
           ))}
         </div>

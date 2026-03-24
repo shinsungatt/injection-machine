@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
 
 const CONTENT_TYPES: Record<string, string> = {
   pdf:   'application/pdf',
@@ -19,12 +20,28 @@ export async function GET(
 
   const { data: file, error } = await supabase
     .from('project_files')
-    .select('file_data, name, file_type, file_size')
+    .select('file_data, file_path, storage_path, name, file_type')
     .eq('id', fileId)
     .eq('project_id', id)
     .single()
 
-  if (error || !file?.file_data) {
+  if (error || !file) {
+    return NextResponse.json({ error: '파일을 찾을 수 없습니다.' }, { status: 404 })
+  }
+
+  // ── Supabase Storage 파일 (storage_path 있음) ──────────────────────────
+  if (file.storage_path) {
+    const admin = createAdminClient()
+    const { data: urlData, error: urlError } = await admin.storage
+      .from('drawings')
+      .createSignedUrl(file.storage_path as string, 3600)
+
+    if (urlError) return NextResponse.json({ error: urlError.message }, { status: 500 })
+    return NextResponse.redirect(urlData.signedUrl)
+  }
+
+  // ── 기존 base64 방식 (file_data 있음) ─────────────────────────────────
+  if (!file.file_data) {
     return NextResponse.json({ error: '파일을 찾을 수 없습니다.' }, { status: 404 })
   }
 

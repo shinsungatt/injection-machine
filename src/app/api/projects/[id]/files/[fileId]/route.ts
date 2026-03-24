@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase-admin'
 
 export async function DELETE(
   _req: NextRequest,
@@ -12,7 +13,7 @@ export async function DELETE(
 
   const { data: file, error: fetchError } = await supabase
     .from('project_files')
-    .select('*')
+    .select('storage_path')
     .eq('id', fileId)
     .eq('project_id', id)
     .single()
@@ -21,9 +22,10 @@ export async function DELETE(
     return NextResponse.json({ error: '파일을 찾을 수 없습니다.' }, { status: 404 })
   }
 
-  // Storage에서 실제 파일 삭제
+  // Supabase Storage에서 실제 파일 삭제
   if (file.storage_path) {
-    await supabase.storage.from('project-files').remove([file.storage_path])
+    const admin = createAdminClient()
+    await admin.storage.from('drawings').remove([file.storage_path as string])
   }
 
   const { error } = await supabase
