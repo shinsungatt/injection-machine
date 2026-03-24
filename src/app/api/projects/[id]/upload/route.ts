@@ -109,7 +109,7 @@ const ALIASES: Record<string, string[]> = {
   // Injection type indicators
   is_injection: ['구분 사출'],         // LW1: "●" means injection part
   part_type:    ['type', 'part type'], // BD Atlas: "IJ"=injection, "ASM/MTS/OTS"=skip
-  mold_type:    ['구분'],              // Pioneer: "MOLD"=injection, "ASSY"=skip
+  mold_type:    ['구분', '구 분'],      // Pioneer: "MOLD"=injection, "ASSY"=skip; "구 분"(공백) 변형 추가
 }
 
 // 비사출 재료 패턴 — SUS/SUS304, 알루미늄/AL6061, 실리콘, EHS(그리스) 등
@@ -215,11 +215,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (s > bestScore) { bestScore = s; headerIdx = i }
   }
 
-  if (bestScore === 0) {
-    return NextResponse.json({
-      error: '컬럼 헤더를 인식하지 못했습니다. 파트명, 재료, 중량 등의 헤더가 포함된 시트인지 확인하세요.'
-    }, { status: 400 })
-  }
+  // bestScore === 0이어도 폴백 모드로 진행 (칼럼 미인식 시 첫 텍스트 컬럼을 part_name으로 사용)
+  const isFallbackMode = bestScore === 0
 
   // ── 2. Sub-header detection (LW1 style two-row headers) ──────────────────
   const headerRowFields = getFieldsOfRow(rawRows[headerIdx])
@@ -249,7 +246,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (field && !(field in colMap)) colMap[field] = i
   }
 
-  // ── 4-B. 서브헤더 직접 스캔 (병합 alias 미일치 보완) ────────────────────
+  // ── 4-B. 폴백 모드: 헤더 미인식 시 첫 텍스트 컬럼을 part_name으로 자동 지정 ─
+  if (isFallbackMode && !('part_name' in colMap) && !('part_number' in colMap)) {
+    const sampleRows = rawRows.slice(dataStart, dataStart + 10)
+    let bestTextCol = 0
+    let bestTextScore = -1
+    const colCount = Math.max(...sampleRows.map(r => (r as unknown[]).length), 1)
+    for (let ci = 0; ci < colCount; ci++) {
+      const vals = sampleRows.map(r => String((r as unknown[])[ci] ?? '').trim()).filter(Boolean)
+      const textCount = vals.filter(v => !/^\d+(\.\d+)?$/.test(v)).length
+      if (textCount > bestTextScore) { bestTextScore = textCount; bestTextCol = ci }
+    }
+    if (bestTextScore > 0) colMap['part_name'] = bestTextCol
+  }
+
+  // ── 4-C. 서브헤더 직접 스캔 (병합 alias 미일치 보완) ────────────────────
   // WOORY XV1: "PILOT 금형비 형사양" alias 미일치 시에도 row5의 "형사양" 직접 인식
   if (isSubHeader) {
     for (let i = 0; i < nextRowRaw.length; i++) {
@@ -314,7 +325,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    if (!isInjection) { filteredInjection++; continue }
+    // 폴백 모드(헤더 미인식)에서는 비사출 필터 건너뜀 — 모든 행 가져오기
+    if (!isInjection && !isFallbackMode) { filteredInjection++; continue }
 
     // ── Part number & name ────────────────────────────────────────────────
     const partNumber = String(get('part_number') ?? '').trim()
@@ -338,8 +350,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // ── Other fields ──────────────────────────────────────────────────────
     const matRaw      = String(get('material') ?? '').trim()
 
-    // 비사출 재료(SUS, 알루미늄, 실리콘 등) → 스킵
-    if (isNonInjectionMaterial(matRaw)) { filteredInjection++; continue }
+    // 비사출 재료(SUS, 알루미늄, 실리콘 등) → 스킵 (폴백 모드에서는 필터 안 함)
+    if (!isFallbackMode && isNonInjectionMaterial(matRaw)) { filteredInjection++; continue }
 
     const partWeight  = Number(get('part_weight_g')   ?? 0) || 0
     const runnerRaw   = Number(get('runner_weight_g') ?? 0)

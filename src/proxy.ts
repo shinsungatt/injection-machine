@@ -5,11 +5,7 @@ const PUBLIC_PATHS = ['/auth/login', '/auth/signup', '/auth/callback', '/auth/pe
 const ADMIN_PATHS = ['/admin']
 
 export async function proxy(request: NextRequest) {
-  // x-pathname 헤더 추가 (layout.tsx에서 현재 경로 감지용)
-  const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('x-pathname', request.nextUrl.pathname)
-
-  let response = NextResponse.next({ request: { headers: requestHeaders } })
+  let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,7 +19,7 @@ export async function proxy(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
-          response = NextResponse.next({ request: { headers: requestHeaders } })
+          response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           )
@@ -40,7 +36,7 @@ export async function proxy(request: NextRequest) {
   // API 라우트는 자체 인증 처리 (리다이렉트 없이 통과)
   if (path.startsWith('/api/')) return response
 
-  const isPublicPath = PUBLIC_PATHS.some(p => path === p || path.startsWith(p + '/'))
+  const isPublicPath = PUBLIC_PATHS.some(p => path.startsWith(p))
   const isPublicAsset =
     path.startsWith('/_next') ||
     path.startsWith('/favicon') ||
@@ -60,7 +56,7 @@ export async function proxy(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    // profile이 없으면 라우팅 보호를 건너뜀 (API 라우트에서 개별 처리)
+    // profile이 없으면 라우팅 보호 건너뜀 (API 라우트에서 개별 처리)
     if (profile) {
       // 미승인 사용자 → 대기 페이지로 (admin은 status 무관하게 통과)
       if (profile.role !== 'admin' && profile.status !== 'approved' && path !== '/auth/pending') {
@@ -68,12 +64,7 @@ export async function proxy(request: NextRequest) {
       }
 
       // 승인된 사용자(또는 admin) → 로그인/회원가입/대기 페이지 접근 시 홈으로
-      // (callback 제외)
-      if (
-        (profile.status === 'approved' || profile.role === 'admin') &&
-        isPublicPath &&
-        path !== '/auth/callback'
-      ) {
+      if ((profile.status === 'approved' || profile.role === 'admin') && isPublicPath) {
         return NextResponse.redirect(new URL('/', request.url))
       }
 
