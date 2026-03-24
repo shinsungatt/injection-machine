@@ -398,7 +398,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: `Excel 파일 파싱 실패: ${msg}` }, { status: 400 })
       }
       const { parts, sheetName, _debug } = parsed
+      console.error('[PARSE DEBUG]', JSON.stringify(_debug))
       if (parts.length === 0) {
+        console.error('[PARSE FAIL] parts=0, debug=', JSON.stringify(_debug))
         return NextResponse.json({
           error: '유효한 파트 데이터를 찾을 수 없습니다. 품명(part_name) 또는 파트번호(품번/도번) 컬럼이 포함된 파일인지 확인하세요.',
           _debug
