@@ -142,7 +142,7 @@ function getFieldsOfRow(row: unknown[]): Set<string> {
 }
 
 // ── BOM 엑셀 파싱 ─────────────────────────────────────────────────────────────
-function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
+function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string): { parts: object[], sheetName: string, _debug?: object } {
   const workbook = XLSX.read(arrayBuffer, { type: 'array' })
 
   // 가장 적합한 시트 선택 (물량정보·현황 등 제외 + 인식 컬럼 수 기준 우선)
@@ -342,7 +342,7 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
       notes:              notesValue,
     })
   }
-  return { parts, sheetName }
+  return { parts, sheetName, _debug: { bestScore, headerIdx, isFallbackMode, colMap, dataStart, totalRows: rawRows.length } }
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -397,10 +397,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         console.error('[POST /files] Excel parse error:', msg)
         return NextResponse.json({ error: `Excel 파일 파싱 실패: ${msg}` }, { status: 400 })
       }
-      const { parts, sheetName } = parsed
+      const { parts, sheetName, _debug } = parsed
       if (parts.length === 0) {
         return NextResponse.json({
-          error: '유효한 파트 데이터를 찾을 수 없습니다. 품명(part_name) 또는 파트번호(품번/도번) 컬럼이 포함된 파일인지 확인하세요.'
+          error: '유효한 파트 데이터를 찾을 수 없습니다. 품명(part_name) 또는 파트번호(품번/도번) 컬럼이 포함된 파일인지 확인하세요.',
+          _debug
         }, { status: 400 })
       }
       const { data, error } = await supabase.from('parts').insert(parts).select()
