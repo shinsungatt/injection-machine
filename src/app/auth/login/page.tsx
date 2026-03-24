@@ -22,7 +22,7 @@ function LoginForm() {
     setLoading(true)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       toast.error(
@@ -31,6 +31,19 @@ function LoginForm() {
           : error.message
       )
       setLoading(false)
+      return
+    }
+
+    // 로그인 후 승인 상태 확인
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('status')
+      .eq('id', data.user!.id)
+      .single()
+
+    if (profile?.status === 'pending') {
+      router.push('/auth/pending')
+      router.refresh()
       return
     }
 
