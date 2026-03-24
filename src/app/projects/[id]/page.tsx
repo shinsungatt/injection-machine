@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   ChevronLeft, Plus, BarChart2, Trash2, RefreshCw,
   FileSpreadsheet, FileText, Box, Layers, X, Upload, CheckCircle2, CheckSquare,
+  Sparkles,
 } from 'lucide-react'
 import type { Project, Part } from '@/lib/supabase'
 import { calcRequiredClampingForce, predictCycleTime } from '@/lib/algorithm'
@@ -39,6 +40,21 @@ type ProjectFile = {
   file_size: number | null
   file_url: string | null
   created_at: string
+}
+
+type AnalysisResult = {
+  part_number: string | null
+  part_name: string | null
+  material: string | null
+  part_weight_g: number
+  projected_area_cm2: number
+  cavity_count: number
+  width_mm: number | null
+  height_mm: number | null
+  depth_mm: number | null
+  notes: string | null
+  _fileName: string
+  _tokensUsed: number
 }
 
 type UploadCardConfig = {
@@ -78,14 +94,16 @@ const UPLOAD_CARDS: UploadCardConfig[] = [
 ]
 
 function UploadCard({
-  config, files, onUpload, onDelete, uploading, uploadProgress,
+  config, files, onUpload, onDelete, onAnalyze, uploading, uploadProgress, analyzingFileId,
 }: {
   config: UploadCardConfig
   files: ProjectFile[]
   onUpload: (type: string, file: File) => void
   onDelete: (fileId: string) => void
+  onAnalyze?: (fileId: string) => void
   uploading: string | null
   uploadProgress: number
+  analyzingFileId: string | null
 }) {
   const [drag, setDrag] = useState(false)
   const ref = useRef<HTMLInputElement>(null)
@@ -122,7 +140,20 @@ function UploadCard({
               <div key={f.id} className="flex items-center gap-2 text-xs bg-white rounded border border-green-200 px-2 py-1.5">
                 <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
                 <span className="flex-1 truncate font-medium text-gray-700">{f.name}</span>
-                {f.file_size && <span className="text-gray-400 shrink-0">{(f.file_size / 1024).toFixed(0)}KB</span>}
+                {f.file_size && <span className="text-gray-400 shrink-0">{(f.file_size / 1024 / 1024).toFixed(1)}MB</span>}
+                {config.type === 'pdf' && onAnalyze && (
+                  <button
+                    onClick={() => onAnalyze(f.id)}
+                    disabled={!!analyzingFileId}
+                    className="flex items-center gap-1 text-purple-600 hover:text-purple-800 shrink-0 disabled:opacity-40"
+                    title="AI 도면 분석"
+                  >
+                    {analyzingFileId === f.id
+                      ? <RefreshCw className="h-3 w-3 animate-spin" />
+                      : <Sparkles className="h-3 w-3" />}
+                    AI분석
+                  </button>
+                )}
                 {f.file_url && (
                   <a href={f.file_url} target="_blank" rel="noreferrer"
                     className="text-blue-500 hover:underline shrink-0">열기</a>
@@ -182,6 +213,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [analyzing, setAnalyzing] = useState(false)
   const [uploading, setUploading] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const [analyzingFile, setAnalyzingFile] = useState<string | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const [applyingPart, setApplyingPart] = useState(false)
   const [selectedParts, setSelectedParts] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
@@ -329,6 +363,58 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     else toast.error('삭제 실패')
   }
 
+  const handleAnalyzeFile = async (fileId: string) => {
+    setAnalyzingFile(fileId)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/files/${fileId}/analyze`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error || 'AI 분석 실패')
+        return
+      }
+      const data = await res.json()
+      setAnalysisResult(data)
+      toast.success('AI 도면 분석 완료')
+    } catch {
+      toast.error('AI 분석 중 오류가 발생했습니다.')
+    } finally {
+      setAnalyzingFile(null)
+    }
+  }
+
+  const handleApplyAnalysis = async () => {
+    if (!analysisResult) return
+    setApplyingPart(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/parts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          part_number:        analysisResult.part_number || `PDF-${Date.now()}`,
+          part_name:          analysisResult.part_name || analysisResult._fileName,
+          material:           analysisResult.material || 'ABS',
+          part_weight_g:      analysisResult.part_weight_g || 0,
+          projected_area_cm2: analysisResult.projected_area_cm2 || 0,
+          cavity_count:       analysisResult.cavity_count || 1,
+          runner_weight_g:    (analysisResult.part_weight_g || 0) * 0.15,
+          notes:              analysisResult.notes,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error || '파트 추가 실패')
+        return
+      }
+      toast.success('파트가 추가되었습니다.')
+      setAnalysisResult(null)
+      fetchData(projectId)
+    } catch {
+      toast.error('파트 추가 중 오류가 발생했습니다.')
+    } finally {
+      setApplyingPart(false)
+    }
+  }
+
   const handleAnalyze = async () => {
     if (parts.length === 0) { toast.error('파트를 먼저 등록하세요.'); return }
     setAnalyzing(true)
@@ -397,12 +483,60 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               files={filesByType(cfg.type)}
               onUpload={handleFileUpload}
               onDelete={handleFileDelete}
+              onAnalyze={cfg.type === 'pdf' ? handleAnalyzeFile : undefined}
               uploading={uploading}
               uploadProgress={uploadProgress}
+              analyzingFileId={analyzingFile}
             />
           ))}
         </div>
       </div>
+
+      {/* AI 분석 결과 패널 */}
+      {analysisResult && (
+        <Card className="border-purple-200 bg-purple-50">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2 text-purple-800">
+              <Sparkles className="h-4 w-4" />
+              AI 도면 분석 결과 — {analysisResult._fileName}
+            </CardTitle>
+            <button onClick={() => setAnalysisResult(null)} className="text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              {[
+                { label: '도번', value: analysisResult.part_number },
+                { label: '품명', value: analysisResult.part_name },
+                { label: '재질', value: analysisResult.material },
+                { label: '중량(g)', value: analysisResult.part_weight_g || '-' },
+                { label: '투영면적(cm²)', value: analysisResult.projected_area_cm2 || '-' },
+                { label: '캐비티', value: analysisResult.cavity_count },
+                { label: '크기(mm)', value: analysisResult.width_mm ? `${analysisResult.width_mm}×${analysisResult.height_mm}×${analysisResult.depth_mm}` : '-' },
+                { label: '표면처리/비고', value: analysisResult.notes || '-' },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-white rounded-lg px-3 py-2 border border-purple-100">
+                  <p className="text-xs text-gray-500">{label}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{value ?? '-'}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={handleApplyAnalysis}
+                disabled={applyingPart}
+                className="gap-2 bg-purple-600 hover:bg-purple-700"
+              >
+                {applyingPart
+                  ? <><RefreshCw className="h-4 w-4 animate-spin" /> 추가 중...</>
+                  : <><Plus className="h-4 w-4" /> 이 데이터로 파트 추가</>}
+              </Button>
+              <p className="text-xs text-gray-400">토큰 사용: {analysisResult._tokensUsed}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 파트 목록 */}
       <Card>
