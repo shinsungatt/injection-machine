@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { Factory, FolderOpen, LayoutDashboard, BookOpen, LogOut, User, Users } from 'lucide-react'
+import { Factory, FolderOpen, LayoutDashboard, BookOpen, LogOut, User, Users, UserCog } from 'lucide-react'
 import { useAuth } from '@/components/AuthProvider'
 
 const navItems = [
   { href: '/', label: '대시보드', icon: LayoutDashboard },
   { href: '/machines', label: '설비 관리', icon: Factory },
   { href: '/projects', label: '프로젝트', icon: FolderOpen },
+  { href: '/customers', label: '고객사 이력', icon: Users },
 ]
 
 export function Navbar() {
@@ -50,7 +51,7 @@ export function Navbar() {
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 )}
               >
-                <Users className="h-4 w-4" />
+                <UserCog className="h-4 w-4" />
                 사용자 관리
               </Link>
             )}

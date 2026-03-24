@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Factory, FolderOpen, Plus, ArrowRight, CheckCircle, BookOpen } from 'lucide-react'
+import { Factory, FolderOpen, Plus, ArrowRight, CheckCircle, BookOpen, Building2 } from 'lucide-react'
 import type { Project, Machine } from '@/lib/supabase'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -36,6 +36,7 @@ export default function DashboardPage() {
 
   const activeMachines = machines.filter(m => m.is_active).length
   const completedProjects = projects.filter(p => p.status === 'completed').length
+  const customerCount = new Set(projects.map(p => p.name).filter(Boolean)).size
 
   return (
     <div className="space-y-8">
@@ -44,7 +45,7 @@ export default function DashboardPage() {
         <p className="text-gray-500 mt-1">사출성형 설비 선택 시스템에 오신 것을 환영합니다</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">등록 설비</CardTitle>
@@ -73,6 +74,16 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-3xl font-bold">{completedProjects}</div>
             <p className="text-sm text-gray-500 mt-1">추천 완료 프로젝트</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">고객사</CardTitle>
+            <Building2 className="h-5 w-5 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{customerCount}</div>
+            <p className="text-sm text-gray-500 mt-1">등록 고객사 수</p>
           </CardContent>
         </Card>
       </div>

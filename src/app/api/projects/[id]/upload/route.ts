@@ -106,6 +106,11 @@ const ALIASES: Record<string, string[]> = {
     'cycle_time_sec', 'c/t', 'c/t sec', 'ct', 'ct sec', 'cycle time',
     '사이클타임', '사이클 타임', 'c/time', '예상 c/time', '예상c/time',
   ],
+  finish: [
+    'finish', 'surface finish', 'surface treatment',
+    '표면처리', '후가공', '표면사양', '도장사양', '사상', '도장', '도금', '표면',
+    'painting', 'plating', 'coating',
+  ],
   // Injection type indicators
   is_injection: ['구분 사출'],         // LW1: "●" means injection part
   part_type:    ['type', 'part type'], // BD Atlas: "IJ"=injection, "ASM/MTS/OTS"=skip
@@ -207,10 +212,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: '데이터가 없습니다.' }, { status: 400 })
   }
 
-  // ── 1. Find best header row (scan first 6 rows) ──────────────────────────
+  // ── 1. Find best header row (scan first 10 rows) ─────────────────────────
   let headerIdx = 0
   let bestScore = 0
-  for (let i = 0; i < Math.min(6, rawRows.length); i++) {
+  for (let i = 0; i < Math.min(10, rawRows.length); i++) {
     const s = scoreRow(rawRows[i])
     if (s > bestScore) { bestScore = s; headerIdx = i }
   }
@@ -268,6 +273,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (field && !(field in colMap)) colMap[field] = i
     }
   }
+
+  // ── 4-D. 미인식 컬럼 수집 (upload 결과 UI 표시용) ────────────────────────
+  const mappedColIndices = new Set(Object.values(colMap))
+  const unmappedHeaders = headers
+    .map((h, i) => ({ h, i }))
+    .filter(({ h, i }) => !mappedColIndices.has(i) && h && !h.startsWith('col_') && h.length >= 2)
+    .map(({ h }) => h)
+    .slice(0, 20)
 
   // ── 5. Content-based correction for LW1-style files ──────────────────────
   // When part_name column contains part-code values (like "84640-XW110"),
@@ -391,6 +404,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const ctRaw = colMap.cycle_time_sec !== undefined ? Number(row[colMap.cycle_time_sec]) : NaN
     const cycleTimeSec = !isNaN(ctRaw) && ctRaw > 0 ? Math.round(ctRaw) : null
 
+    // 표면처리/후가공 → notes 필드 (finish:High Glossy 형태로 저장)
+    const noteParts: string[] = []
+    if (colMap.finish !== undefined) {
+      const finishVal = String(get('finish') ?? '').trim()
+      if (finishVal && finishVal !== '-') noteParts.push(`finish:${finishVal}`)
+    }
+    const notes = noteParts.length > 0 ? noteParts.join('|') : null
+
     parts.push({
       project_id:        id,
       part_number:       pn,
@@ -404,6 +425,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       mold_height_mm:    moldH,
       mold_depth_mm:     moldD,
       cycle_time_sec:    cycleTimeSec,
+      notes,
     })
   }
 
@@ -421,10 +443,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   return NextResponse.json({
     success: true,
-    count:          data?.length ?? 0,
-    sheet:          sheetName,
+    count:           data?.length ?? 0,
+    sheet:           sheetName,
     skipped,
     filteredInjection,
-    mappedColumns:  Object.keys(colMap),
+    mappedColumns:   Object.keys(colMap),
+    unmappedHeaders,
   })
 }

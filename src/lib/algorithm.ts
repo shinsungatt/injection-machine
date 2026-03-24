@@ -193,7 +193,7 @@ function normalizeMaterialKey(material: string): string {
   const upper = material.toUpperCase().replace(/\s/g, '')
   if (upper.startsWith('PA6') || upper.startsWith('PA ')) return 'PA66'
   if (upper.startsWith('PP')) return 'PP'
-  if (upper.startsWith('PC+ABS') || upper.startsWith('PC/ABS') || upper.startsWith('PCABS')) return 'PCABS'
+  if (upper.startsWith('PC+ABS') || upper.startsWith('PC/ABS') || upper.startsWith('PCABS') || upper.startsWith('PC-ABS')) return 'PCABS'
   if (upper.startsWith('PC')) return 'PC'
   if (upper.startsWith('ABS')) return 'ABS'
   if (upper.startsWith('POM')) return 'POM'
