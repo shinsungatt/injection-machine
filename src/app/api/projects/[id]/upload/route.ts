@@ -323,10 +323,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const val = String(get('is_injection') ?? '').trim()
       isInjection = val !== '' && val !== '0'
     } else if ('mold_type' in colMap) {
-      // Pioneer style: "구분" column — MOLD=injection, ASSY/BUY=skip, empty=skip
+      // Pioneer style: "구분" column — MOLD=injection, PRESS/DIE/BUY=skip, empty=skip, 기타=포함
       const val = String(get('mold_type') ?? '').trim().toUpperCase()
       if (val === '') { skipped++; continue }
-      isInjection = /^(MOLD|MOULD|사출|INJ)/.test(val)
+      // 명확히 비-사출(프레스/다이캐스팅/구매)인 경우만 제외, MOLD/알수없음은 포함
+      const isExplicitNonInj = /^(PRESS|STAMP|WELD|BRAC|DIE|CAST|구매|BUY|STP|표준|ASM|ASSY)/.test(val)
+      if (isExplicitNonInj) isInjection = false
     } else if ('part_type' in colMap) {
       // BD Atlas style: "Type" column — IJ/INJ/PLT=injection, others=skip
       const val = String(get('part_type') ?? '').trim().toUpperCase()

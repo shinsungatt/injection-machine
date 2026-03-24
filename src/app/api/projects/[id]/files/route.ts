@@ -101,7 +101,7 @@ const ALIASES: Record<string, string[]> = {
   ],
   is_injection: ['구분 사출'],
   part_type:    ['type', 'part type'],
-  mold_type:    ['구분'],
+  mold_type:    ['구 분', '구분'],  // "구 분"(공백 포함)을 앞에 두어 우선 매핑
   remark: [
     'remark', 'remarks', '비고', '특이사항', '메모', 'note', 'notes',
     '참고', '코멘트', 'comment', 'comments',
@@ -154,7 +154,7 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
     const ws = workbook.Sheets[name]
     const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
     let sheetScore = 0
-    for (let i = 0; i < Math.min(6, rows.length); i++) {
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
       const s = scoreRow(rows[i])
       if (s > sheetScore) sheetScore = s
     }
@@ -164,13 +164,24 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
   const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' }) as unknown[][]
   if (rawRows.length === 0) return { parts: [], sheetName }
 
-  // 헤더 행 탐색 (최대 6행)
+  // 헤더 행 탐색 (최대 10행)
   let headerIdx = 0, bestScore = 0
-  for (let i = 0; i < Math.min(6, rawRows.length); i++) {
+  for (let i = 0; i < Math.min(10, rawRows.length); i++) {
     const s = scoreRow(rawRows[i])
     if (s > bestScore) { bestScore = s; headerIdx = i }
   }
-  if (bestScore === 0) return { parts: [], sheetName }
+
+  // ── 폴백 모드: 헤더 인식 실패 시 가장 텍스트가 많은 컬럼을 part_name으로 처리 ──
+  let isFallbackMode = false
+  if (bestScore === 0) {
+    isFallbackMode = true
+    // 상위 3행의 셀 수를 비교해 가장 많은 행을 헤더로 간주
+    let maxCells = 0
+    for (let i = 0; i < Math.min(5, rawRows.length); i++) {
+      const filled = rawRows[i].filter(c => c !== '' && c !== null && c !== undefined).length
+      if (filled > maxCells) { maxCells = filled; headerIdx = i }
+    }
+  }
 
   // ── 서브헤더 감지 (현대 RFQ 등 2줄 헤더 대응) ────────────────────────────
   // 예: 행1 "생산정보 / SIZE(mm)" → 행2 "재질 / 가로 / 세로 / 높이 / C/Time"
@@ -178,7 +189,7 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
   const nextRowRaw = headerIdx + 1 < rawRows.length ? rawRows[headerIdx + 1] : []
   const nextRowFields = getFieldsOfRow(nextRowRaw)
   const newFieldsInNext = [...nextRowFields].filter(f => !headerRowFields.has(f))
-  const isSubHeader = newFieldsInNext.length > 0
+  const isSubHeader = !isFallbackMode && newFieldsInNext.length > 0
 
   // ── 컬럼 헤더 병합: 부모+자식 결합, 부모가 비어있으면 자식 값 직접 사용 ──
   const headerRow = rawRows[headerIdx].map(c => String(c ?? '').trim())
@@ -197,6 +208,21 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
     if (field && !(field in colMap)) colMap[field] = i
   }
 
+  // 폴백 모드: 가장 텍스트가 많은 컬럼을 part_name으로 자동 지정
+  if (isFallbackMode && !('part_name' in colMap) && !('part_number' in colMap)) {
+    const colTextCount: number[] = []
+    const dataRows = rawRows.slice(headerIdx + 1)
+    for (let ci = 0; ci < headers.length; ci++) {
+      const count = dataRows.filter(r => {
+        const v = String(r[ci] ?? '').trim()
+        return v.length > 0 && isNaN(Number(v))
+      }).length
+      colTextCount[ci] = count
+    }
+    const maxIdx = colTextCount.indexOf(Math.max(...colTextCount))
+    if (maxIdx >= 0) colMap['part_name'] = maxIdx
+  }
+
   const dataStart = headerIdx + (isSubHeader ? 2 : 1)
   const seenNumbers = new Set<string>()
   let partSeq = 0  // 파트번호 없을 때 순번 부여용 (1, 2, 3...)
@@ -208,31 +234,35 @@ function parsePartsFromBuffer(arrayBuffer: ArrayBuffer, projectId: string) {
 
     const get = (f: string) => colMap[f] !== undefined ? row[colMap[f]] : undefined
 
-    // 사출 타입 필터링
-    let isInjection = true
-    if ('is_injection' in colMap) {
-      const val = String(get('is_injection') ?? '').trim()
-      isInjection = val !== '' && val !== '0'
-    } else if ('mold_type' in colMap) {
-      const val = String(get('mold_type') ?? '').trim().toUpperCase()
-      if (val === '') continue
-      isInjection = /^(MOLD|MOULD|사출|INJ)/.test(val)
-    } else if ('part_type' in colMap) {
-      const val = String(get('part_type') ?? '').trim().toUpperCase()
-      if (val === '') { isInjection = false }
-      else {
-        const isInj    = /^(IJ|INJ|INJECTION|PLT|PLASTIC|사출)/.test(val)
-        const isNonInj = /^(ASM|ASSY|MTS|OTS|STP|BUY|구매|조립|금속|표준)/.test(val)
-        if (isNonInj && !isInj) isInjection = false
+    // 사출 타입 필터링 (폴백 모드에서는 필터 건너뜀)
+    if (!isFallbackMode) {
+      let isInjection = true
+      if ('is_injection' in colMap) {
+        const val = String(get('is_injection') ?? '').trim()
+        isInjection = val !== '' && val !== '0'
+      } else if ('mold_type' in colMap) {
+        const val = String(get('mold_type') ?? '').trim().toUpperCase()
+        if (val === '') continue
+        // 명확히 비-사출(프레스/다이캐스팅/구매)인 경우만 제외, 그 외(MOLD/알수없음)는 포함
+        const isExplicitNonInj = /^(PRESS|STAMP|WELD|BRAC|DIE|CAST|구매|BUY|STP|표준|ASM|ASSY)/.test(val)
+        if (isExplicitNonInj) isInjection = false
+      } else if ('part_type' in colMap) {
+        const val = String(get('part_type') ?? '').trim().toUpperCase()
+        if (val === '') { isInjection = false }
+        else {
+          const isInj    = /^(IJ|INJ|INJECTION|PLT|PLASTIC|사출)/.test(val)
+          const isNonInj = /^(ASM|ASSY|MTS|OTS|STP|BUY|구매|조립|금속|표준)/.test(val)
+          if (isNonInj && !isInj) isInjection = false
+        }
       }
+      if (!isInjection) continue
     }
-    if (!isInjection) continue
 
     const partNumber = String(get('part_number') ?? '').trim()
     const partName   = String(get('part_name')   ?? '').trim()
     // part_name/part_number 컬럼이 colMap에 있는데 값이 비어 있으면 스킵
-    // 컬럼 자체가 없는 경우(colMap 미존재)는 AUTO-N으로 처리하여 스킵하지 않음
-    const hasNameCol = 'part_name' in colMap || 'part_number' in colMap
+    // 폴백 모드 또는 컬럼 자체가 없는 경우는 순번으로 처리하여 스킵하지 않음
+    const hasNameCol = !isFallbackMode && ('part_name' in colMap || 'part_number' in colMap)
     if (hasNameCol && !partNumber && !partName) continue
     if (/^(합계|total|소계|sub.?total)/i.test(partName || partNumber)) continue
 
