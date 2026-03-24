@@ -73,7 +73,8 @@ export async function POST(
   // ── Claude Vision 분석 ────────────────────────────────────────────────────
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-  const message = await client.messages.create({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const message = await (client.messages.create as any)({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1024,
     messages: [{
@@ -86,7 +87,7 @@ export async function POST(
             media_type: 'application/pdf',
             data: pdfBase64,
           },
-        } as Parameters<typeof client.messages.create>[0]['messages'][0]['content'][0],
+        },
         {
           type: 'text',
           text: PROMPT,
@@ -95,9 +96,10 @@ export async function POST(
     }],
   })
 
-  const rawText = message.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { type: 'text'; text: string }).text)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawText = (message.content as any[])
+    .filter((b: { type: string }) => b.type === 'text')
+    .map((b: { type: string; text: string }) => b.text)
     .join('')
 
   // JSON 파싱 (마크다운 코드블록 제거)
